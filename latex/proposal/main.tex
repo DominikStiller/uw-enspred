@@ -1,0 +1,39 @@
+\documentclass[parskip=half,DIV=14,bookmarkpackage=false]{scrartcl}
+
+\title{Project proposal}
+\subtitle{ATM S 544}
+\author{Dominik Stiller}
+\date{\today}
+
+\input{settings}
+
+\makeglossaries
+\input{acronyms}
+
+
+\begin{document}
+
+\maketitle
+
+\pagenumbering{gobble}
+
+
+My project will reproduce some results from \textcite{Perkins2020} and \textcite{Perkins2021}, or PH20 and PH21 in short. They describe a coupled atmosphere--ocean reconstruction of the last millenium using online \gls{DA} and \glspl{LIM}. Since my future research will continue this line of work, the project would provide a good starting point to get acquainted with the models, data, and workflow. The existing results give me a reference to check the correctness of my results. However, I will be using data from CMIP6 instead of CMIP5.
+
+The project will involve the following steps:
+\begin{enumerate}
+    \item \textbf{Fit \gls{LIM} and run simulation.} First, I need a working model for coupled atmosphere--ocean dynamics. This model will be a \gls{LIM}, fit to CMIP6/PMIP4 data from the \emph{past2k} experiment~\autocite{Jungclaus2017}. Specifically, the \gls{LIM} will emulate annual-average MPI-ESM1 fields between 1-1849 CE. Results for the \emph{past1000} experiment exist for four other models but will not be used (or only for further validation). The fitting procedure follows PH20/PH21, including parameter selection and dimensionality reduction. To test if the \gls{LIM} works, I will compare deterministic forecasts to MPI-ESM1 data. This in-sample verification evaluates the skill to emulate rather than generalize, which is acceptable at this point. Particularly, I will reproduce Figure 2a (forecast skill up to 10 years lead time for in-sample data) and Figure 3a (spatial correlations of 1-year forecasts with in-sample data) from PH20. Contrary to PH20, I will propagate a single \gls{LIM} based on the analytical solution instead of stochastically integrating an ensemble. Covariances will therefore be propagated directly instead of derived from ensemble statistics, but both should lead to the same statistical results.
+    \item \textbf{Assimilate pseudoproxies using a Kalman filter.} The next step is to set up online \gls{DA} using a Kalman filter together with the \gls{LIM}. Observations will come from pseudoproxies, which are 2 m surface air temperatures from MPI-ESM1 \emph{past2k} runs with superimposed noise. The observation model is therefore just the identity. I will reproduce Figures 3a and 3c (mean and confidence interval for SST and OHC700m over 1000 years) from PH21. While they use an ensemble Kalman filter, I can use a regular one since I am propagating a single model directly.
+    \item \textbf{Fit cyclostationary \gls{LIM}.} (\emph{optional}) If time permits, I will fit a cyclostationary \gls{LIM}, which can account for seasonal variations in model dynamics. This should improve \gls{DA} by unlocking the sub-annual resolution of some (pseudo)proxies. Each season will then have a different \gls{LIM}, which was not the case in PH21. I will produce a figure that shows the per-month average and variance of SST for both a constant and a cyclostationary \gls{LIM}. Variances for the cyclostationary model should be lower since there is less mismatch between observations and model.
+\end{enumerate}
+
+
+
+
+
+
+\printbibliography
+
+
+
+\end{document}
