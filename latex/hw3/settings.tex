@@ -1,0 +1,58 @@
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{siunitx,amsmath,physics}
+\usepackage{caption,subcaption,graphicx,csquotes,xcolor}
+\usepackage{booktabs}
+\usepackage{placeins}
+\usepackage[
+	backend=biber,
+	bibwarn=true,
+	bibencoding=utf8,
+	sortlocale=en_US,
+	url=false,
+	style=apa,
+	isbn=false
+]{biblatex}
+
+\definecolor{uw-purple}{RGB}{51, 0, 111}
+
+\usepackage{hyperref}
+\hypersetup{
+	colorlinks=true,
+	linkcolor=uw-purple,
+	citecolor=uw-purple,
+	urlcolor=uw-purple
+}
+
+\usepackage{doi}
+\usepackage{nomencl}
+\makenomenclature
+\usepackage[noabbrev,capitalise]{cleveref}
+\usepackage[
+	outputdir=build,
+]{minted}
+\setminted{
+	linenos,
+	tabsize=4,
+	fontsize=\small,
+}
+\newmintinline{python}{}
+
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage{inconsolata}
+\usepackage{tikz}
+
+\newcommand{\result}[1]{\colorbox{uw-purple}{\textcolor{white}{#1}}}
+
+\setlength{\nomlabelwidth}{1.5cm}
+\setlength{\nomitemsep}{-\parsep}
+\newcommand{\nomunit}[1]{%
+\renewcommand{\nomentryend}{\hspace*{\fill}\si{#1}}}
+
+\sisetup{per-mode=symbol}
+\AtBeginDocument{\RenewCommandCopy\qty\SI}
+
+\DeclareGraphicsRule{.ai}{pdf}{.ai}{}
+
+% \addbibresource{../references/bibliography.bib}

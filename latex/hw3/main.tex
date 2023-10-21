@@ -1,0 +1,88 @@
+\documentclass[parskip=half,DIV=12]{scrartcl}
+
+\title{Lab assignment 3}
+\subtitle{ATM S 544}
+\author{Dominik Stiller}
+\date{\today}
+
+\input{settings}
+
+
+\begin{document}
+
+\maketitle
+
+
+
+
+\section{Single observation}
+
+\begin{figure}[h]
+    \centering
+ 
+    \begin{subfigure}[c]{\textwidth}
+       \includegraphics[width=\textwidth]{figures/single_point1.pdf}
+       \subcaption{Point 1 (\ang{40} N)}
+    \end{subfigure}
+     
+    \bigskip
+     
+    \begin{subfigure}[c]{\textwidth}
+       \includegraphics[width=\textwidth]{figures/single_point2.pdf}
+       \subcaption{Point 2 (\ang{20} N)}
+    \end{subfigure}
+ 
+    \caption{Assimilation of a single observation.}
+ \end{figure}
+
+
+
+\section{Multiple observations}
+
+\begin{figure}[h]
+   \centering
+
+   \begin{subfigure}[c]{\textwidth}
+      \includegraphics[width=\textwidth]{figures/multiple_point1_var10.pdf}
+      \subcaption{Point 1 (\ang{40} N)}
+   \end{subfigure}
+    
+   \bigskip
+    
+   \begin{subfigure}[c]{\textwidth}
+      \includegraphics[width=\textwidth]{figures/multiple_point2_var10.pdf}
+      \subcaption{Point 2 (\ang{20} N)}
+   \end{subfigure}
+
+   \caption{Assimilation of 100 observations.}
+\end{figure}
+
+
+no cos lat weighting because we're only comparing values at the same latitude, and we are only interested in the relative magnitude of error and variance
+
+
+
+\subsection{Evolution of error and variance}
+
+\begin{figure}[h]
+   \centering
+
+   \begin{subfigure}[c]{\textwidth}
+      \includegraphics[width=\textwidth]{figures/stats_point1_var01.pdf}
+      \subcaption{Point 1 (\ang{40} N)}
+   \end{subfigure}
+    
+   \bigskip
+    
+   \begin{subfigure}[c]{\textwidth}
+      \includegraphics[width=\textwidth]{figures/stats_point2_var01.pdf}
+      \subcaption{Point 2 (\ang{20} N)}
+   \end{subfigure}
+
+   \caption{Evolution of statistics for assimilation of 100 observations.}
+\end{figure}
+ 
+
+
+
+\end{document}
