@@ -28,9 +28,9 @@ year = 2013
 month = 10
 day = 6
 # time increment between ensemble members, in hours
-dt = 1
+dt = 24
 
-channels = ["z500", "u10"]
+channels = ["z500", "u500"]
 
 # create instance of DataSource object (has read fuction; takes list of channels)
 ds = DataSource(channels)
@@ -38,7 +38,7 @@ ds = DataSource(channels)
 date = datetime(year, month, day)
 data = []
 for n in range(Nens):
-    print(f"n={n+1}/{Nens}, data={date}")
+    print(f"n={n+1}/{Nens}, date={date}")
 
     # read
     data.append(ds[date])
@@ -49,7 +49,7 @@ for n in range(Nens):
     print()
 
 # combine members into single dataset
-data = xr.concat(data).to_dataset(dim="channel")
+data = xr.concat(data, dim="time").to_dataset(dim="channel")
 
 # change time coordinate to member index
 data = data.assign_coords({"time": range(Nens)}).rename({"time": "ensemble"})
@@ -58,7 +58,7 @@ data = data.assign_coords({"time": range(Nens)}).rename({"time": "ensemble"})
 data["z500"] /= grav
 
 # save to a file
-outfile = f"/glade/work/chriss/ATMS544/lab4data/ens_{day:02d}Oct{year}.hdf"
+outfile = f"/glade/work/chriss/ATMS544/lab4data/ens_{day:02d}Oct{year}.nc"
 data.to_netcdf(outfile)
 
 print("Saved data to", outfile)
