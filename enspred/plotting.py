@@ -27,7 +27,7 @@ def set_plotting_theme(force_light=False):
             "#009B77",
         ],
         font_scale=1.7,
-        font="sans-serif",
+        font="serif",
         rc={
             "font.family": "serif",
             "lines.linewidth": 1.2,
