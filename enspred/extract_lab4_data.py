@@ -24,7 +24,7 @@ grav = 9.81
 # number of ensemble members
 Nens = 100
 # starting time for ensemble
-year = 2013
+year = 2017
 month = 10
 day = 6
 # time increment between ensemble members, in hours
