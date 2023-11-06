@@ -36,6 +36,7 @@ def set_plotting_theme(force_light=False):
             # "font.weight": "light",
             # "mathtext.default": "regular",
             "figure.figsize": (12, 5),
+            "figure.dpi": 450,
             "figure.constrained_layout.use": True,
             "axes.axisbelow": False,
             "xtick.bottom": True,
