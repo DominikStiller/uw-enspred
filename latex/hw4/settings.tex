@@ -1,0 +1,64 @@
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{siunitx,amsmath,physics}
+\usepackage{caption,subcaption,graphicx,csquotes,xcolor,pifont}
+\usepackage{booktabs}
+\usepackage{placeins}
+\usepackage[
+	backend=biber,
+	bibwarn=true,
+	bibencoding=utf8,
+	sortlocale=en_US,
+	url=false,
+	style=apa,
+	isbn=false
+]{biblatex}
+
+\definecolor{uw-purple}{RGB}{51, 0, 111}
+\definecolor{mpl-darkblue}{RGB}{12, 35, 64}
+\definecolor{mpl-red}{RGB}{165, 0, 52}
+\definecolor{mpl-lightblue}{RGB}{0, 166, 214}
+\definecolor{mpl-pink}{RGB}{239, 96, 163}
+\definecolor{mpl-yellow}{RGB}{255, 184, 28}
+\definecolor{mpl-orange}{RGB}{236, 104, 66}
+
+\usepackage{hyperref}
+\hypersetup{
+	colorlinks=true,
+	linkcolor=uw-purple,
+	citecolor=uw-purple,
+	urlcolor=uw-purple
+}
+
+\usepackage{doi}
+\usepackage{nomencl}
+\makenomenclature
+\usepackage[noabbrev,capitalise]{cleveref}
+\usepackage[
+	outputdir=build,
+]{minted}
+\setminted{
+	linenos,
+	tabsize=4,
+	fontsize=\small,
+}
+\newmintinline{python}{}
+
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage{inconsolata}
+\usepackage{tikz}
+
+\newcommand{\result}[1]{\colorbox{uw-purple}{\textcolor{white}{#1}}}
+
+\setlength{\nomlabelwidth}{1.5cm}
+\setlength{\nomitemsep}{-\parsep}
+\newcommand{\nomunit}[1]{%
+\renewcommand{\nomentryend}{\hspace*{\fill}\si{#1}}}
+
+\sisetup{per-mode=symbol}
+\AtBeginDocument{\RenewCommandCopy\qty\SI}
+
+\DeclareGraphicsRule{.ai}{pdf}{.ai}{}
+
+% \addbibresource{../references/bibliography.bib}
