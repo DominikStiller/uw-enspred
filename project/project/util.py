@@ -22,7 +22,7 @@ def stack_state(ds: Dataset) -> DataArray:
 
 
 def unstack_state(da: DataArray) -> Dataset:
-    return data.to_unstacked_dataset("state")
+    return da.to_unstacked_dataset("state")
 
 
 def inverse(da: DataArray):
@@ -30,26 +30,6 @@ def inverse(da: DataArray):
 
 
 def matrix_power(da: DataArray, n: int):
-    return DataArray(np.linalg.matrix_power(np.atleast_2d(da.values), n), coords=da.coords)
-
-
-def estimate_cov(
-    da: DataArray, da2: Optional[DataArray] = None, sample_dim: str = "time"
-):
-    assert da.ndim == 2
-    if da2 is not None:
-        assert da2.ndim == 2
-        assert da.dims == da2.dims
-        assert da.shape == da2.shape
-    else:
-        da2 = da
-
-    data_dims = list(da.coords)
-    data_dims.remove(sample_dim)
-    C = xr.cov(
-        da.rename({data_dim: f"{data_dim}1" for data_dim in data_dims}),
-        da2.rename({data_dim: f"{data_dim}2" for data_dim in data_dims}),
-        dim=sample_dim,
+    return DataArray(
+        np.linalg.matrix_power(np.atleast_2d(da.values), n), coords=da.coords
     )
-
-    return C
