@@ -1,0 +1,14 @@
+name: enspred
+channels:
+  - conda-forge
+dependencies:
+  - numpy
+  - xarray
+  - matplotlib
+  - seaborn
+  - cartopy
+  - xesmf
+  - jupyter
+  - black
+  - intake-esm
+  - dask
