@@ -36,6 +36,34 @@ def load_results(type):
     return results
 
 
+def load_full_field(type, step, n_members=100):
+    results = []
+
+    step_folder = list(sorted(archive_path.glob("*/")))[step]
+    print(step_folder)
+    for member in range(n_members):
+        ds_file = step_folder / type / f"member_{member}.h5"
+        if not ds_file.exists():
+            continue
+
+        ds = xr.open_dataset(ds_file)
+        ds = ds.sel(channel_pl=["z", "v"], level=500)
+        ds = xr.Dataset({
+            "z500": (["lat", "lon"], ds.sel(channel_pl="z")["pl_data"].data / 9.81),
+            "v500": (["lat", "lon"], ds.sel(channel_pl="v")["pl_data"].data)
+        }, coords={
+            "lat": ds.lat,
+            "lon": ds.lon,
+            "member": [member],
+            "time": [pd.to_datetime(step_folder.name, format="%Y%m%d%H")]
+        })
+        
+        results.append(ds)
+
+    results = xr.combine_by_coords(results)
+    return results
+
+
 def load_verifications():
     verifications = xr.combine_by_coords([
         xr.open_dataset(verification_path / "188_verification.nc"),

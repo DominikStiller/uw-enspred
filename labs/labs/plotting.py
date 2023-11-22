@@ -2,9 +2,10 @@ import os
 from pathlib import Path
 from typing import Union
 
-import matplotlib
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sb
+import cartopy.crs as ccrs
 
 
 def set_plotting_theme(force_light=False):
@@ -94,16 +95,16 @@ def format_plot(
         x_major_locator_ax = x_major_locator
         if not x_major_locator_ax:
             if ax.get_xscale() == "log":
-                x_major_locator_ax = matplotlib.ticker.LogLocator()
+                x_major_locator_ax = mpl.ticker.LogLocator()
             else:
-                x_major_locator_ax = matplotlib.ticker.AutoLocator()
+                x_major_locator_ax = mpl.ticker.AutoLocator()
 
         y_major_locator_ax = y_major_locator
         if not y_major_locator_ax:
             if ax.get_yscale() == "log":
-                y_major_locator_ax = matplotlib.ticker.LogLocator()
+                y_major_locator_ax = mpl.ticker.LogLocator()
             else:
-                y_major_locator_ax = matplotlib.ticker.AutoLocator()
+                y_major_locator_ax = mpl.ticker.AutoLocator()
 
         ax.get_xaxis().set_major_locator(x_major_locator_ax)
         ax.get_yaxis().set_major_locator(y_major_locator_ax)
@@ -111,20 +112,20 @@ def format_plot(
         x_minor_locator_ax = x_minor_locator
         if not x_minor_locator_ax:
             if ax.get_xscale() == "log":
-                x_minor_locator_ax = matplotlib.ticker.LogLocator(
+                x_minor_locator_ax = mpl.ticker.LogLocator(
                     base=10, subs="auto", numticks=100
                 )
             else:
-                x_minor_locator_ax = matplotlib.ticker.AutoMinorLocator()
+                x_minor_locator_ax = mpl.ticker.AutoMinorLocator()
 
         y_minor_locator_ax = y_minor_locator
         if not y_minor_locator_ax:
             if ax.get_yscale() == "log":
-                y_minor_locator_ax = matplotlib.ticker.LogLocator(
+                y_minor_locator_ax = mpl.ticker.LogLocator(
                     base=10, subs="auto", numticks=100
                 )
             else:
-                y_minor_locator_ax = matplotlib.ticker.AutoMinorLocator()
+                y_minor_locator_ax = mpl.ticker.AutoMinorLocator()
 
         ax.get_xaxis().set_minor_locator(x_minor_locator_ax)
         ax.get_yaxis().set_minor_locator(y_minor_locator_ax)
@@ -145,6 +146,63 @@ def format_plot(
 
     if tight_layout:
         fig.tight_layout(pad=0.1, h_pad=0.4, w_pad=0.4)
+
+
+def plot_field(
+    axs,
+    dss,
+    field,
+    colorbar=True,
+    cbar_label=None,
+    vmin=None,
+    vmax=None,
+    cmap="Blues",
+    highlight_contour=None,
+    rotate_cbar_ticks=False,
+    n_level=50,
+    **kwargs,
+):
+    if not isinstance(axs, list):
+        axs = [axs]
+    if not isinstance(dss, list):
+        dss = [dss]
+
+    vmin = vmin or min([ds[field].min() for ds in dss])
+    vmax = vmax or max([ds[field].max() for ds in dss])
+
+    for ax, ds in zip(axs, dss):
+        # Use our own locator because the default locator does not respect vmin/vmax
+        levels = mpl.ticker.MaxNLocator(n_level + 1).tick_values(vmin, vmax)
+        cset = ax.contourf(
+            ds.lon,
+            ds.lat,
+            ds[field],
+            levels,
+            transform=ccrs.PlateCarree(),
+            vmin=vmin,
+            vmax=vmax,
+            cmap=cmap,
+            **kwargs,
+        )
+        for c in cset.collections:
+            c.set_rasterized(True)
+
+        if highlight_contour is not None:
+            c_highlight = ax.contour(
+                ds.lon,
+                ds.lat,
+                ds[field],
+                [highlight_contour],
+                transform=ccrs.PlateCarree(),
+                colors="C1",
+            )
+
+    if colorbar:
+        cb = plt.colorbar(cset, ax=ax, orientation="horizontal", label=cbar_label)
+        if highlight_contour:
+            cb.add_lines(c_highlight)
+        if rotate_cbar_ticks:
+            cb.ax.tick_params(rotation=15)
 
 
 set_plotting_theme()
