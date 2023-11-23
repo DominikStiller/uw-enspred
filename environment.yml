@@ -2,13 +2,15 @@ name: enspred
 channels:
   - conda-forge
 dependencies:
+  - python=3.11
   - numpy
   - xarray
   - matplotlib
   - seaborn
   - cartopy
-  - xesmf
+  - xesmf>0.8
   - jupyter
   - black
+  - black-jupyter
   - intake-esm
   - dask

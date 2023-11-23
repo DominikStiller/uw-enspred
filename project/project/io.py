@@ -2,6 +2,7 @@ import dataclasses
 import warnings
 from typing import Optional
 import xesmf as xe
+import platform
 
 import intake
 import xarray as xr
@@ -30,23 +31,40 @@ VARIABLES = {
     "tas": CMIP6Variable("tas", "tas", "Amon"),
     "tos": CMIP6Variable("tos", "tos", "Omon"),
     "zos": CMIP6Variable("zos", "zos", "Omon"),
+    "sos": CMIP6Variable("sos", "sos", "Omon"),
+    "thetaot700": CMIP6Variable("thetaot700", "thetaot700", "Emon"),
 }
 
 
-class GLADELoader:
-    def __init__(self, experiment_id: str, model_id: str, variables: list[str]):
+def get_catalog_location():
+    hostname = platform.node()
+    if hostname in ["enkf"]:
+        return "/home/enkf6/dstiller/CMIP6/catalog.json"
+    elif hostname in ["casper-login1"] or hostname.startswith("crhtc"):
+        return "/glade/collections/cmip/catalog/intake-esm-datastore/catalogs/glade-cmip6.json"
+    else:
+        raise "Unknown host, please specify catalog location"
+
+
+class IntakeESMLoader:
+    def __init__(
+        self,
+        experiment_id: str,
+        model_id: str,
+        variables: list[str],
+        catalog_location: str = None,
+    ):
         self.experiment_id = experiment_id
         self.model_id = model_id
         self.variables = list(map(VARIABLES.get, variables))
         self.cat = None
         self.regridder = Regridder(xe.util.grid_global(2, 2, lon1=359))
+        self.catalog_location = catalog_location or get_catalog_location()
 
     def load_dataset(self):
         if self.cat is None:
-            logger.debug("Opening catalog")
-            self.cat = intake.open_esm_datastore(
-                "/glade/collections/cmip/catalog/intake-esm-datastore/catalogs/glade-cmip6.json"
-            )
+            logger.debug(f"Opening catalog {self.catalog_location}")
+            self.cat = intake.open_esm_datastore(self.catalog_location)
 
         logger.info("Loading dataset from GLADE")
         datasets = []
@@ -59,9 +77,14 @@ class GLADELoader:
                 table_id=variable.table,
                 variable_id=variable.id,
                 grid_label="gn",
-                time_range="000101-005012",  # TODO remove
+                time_range="700101-702012",  # TODO remove
+                # time_range="000101-005012",  # TODO remove
                 # time_range="185001-186912",  # TODO remove
             )
+
+            # Ensure there is no ambiguity about dataset (i.e. exactly one is found)
+            if len(query_results) == 0:
+                raise "No datasets found for query"
 
             if not all(query_results.nunique().drop(["time_range", "path"]) <= 1):
                 raise "Multiple datasets found for query"
@@ -73,7 +96,14 @@ class GLADELoader:
             dataset = (
                 next(iter(dataset.values()))
                 .drop_vars(
-                    ["dcpp_init_year", "member_id", "time_bnds", "lat_bnds", "lon_bnds"]
+                    [
+                        "dcpp_init_year",
+                        "member_id",
+                        "time_bnds",
+                        "lat_bnds",
+                        "lon_bnds",
+                    ],
+                    errors="ignore",
                 )
                 .squeeze()
             )
@@ -85,7 +115,7 @@ class GLADELoader:
                     .rename_vars({variable.id: variable.name})
                 )
 
-            dataset = self.regridder.regrid(dataset.realm, dataset)
+            # dataset = self.regridder.regrid(dataset.realm, dataset)
 
             datasets.append(dataset)
 
@@ -95,19 +125,20 @@ class GLADELoader:
 
 
 if __name__ == "__main__":
-    loader = GLADELoader(
-        "piControl",
-        "CESM2-FV2",
+    loader = IntakeESMLoader(
+        "past2k",
+        "MPI-ESM1-2-LR",
         [
             "zg500",
             "pr",
-            "ts",
             "psl",
             "rsut",
             "rlut",
             "tas",
             "tos",
             "zos",
+            "sos",
+            "thetaot700",
         ],
     )
     # loader = GLADELoader("historical", "MPI-ESM1-2-LR", ["zg500", "pr"])
