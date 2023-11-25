@@ -6,6 +6,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sb
 import cartopy.crs as ccrs
+from cartopy.util import add_cyclic_point
 
 
 def set_plotting_theme(force_light=False):
@@ -156,6 +157,7 @@ def plot_field(
     vmin=None,
     vmax=None,
     cmap="Blues",
+    ocean_only=False,
     highlight_contour=None,
     rotate_cbar_ticks=False,
     n_level=50,
@@ -166,16 +168,26 @@ def plot_field(
     if not isinstance(das, list):
         das = [das]
 
-    vmin = vmin or min([ds.min() for ds in das])
-    vmax = vmax or max([ds.max() for ds in das])
+    das = [da.load() for da in das]
+
+    if ocean_only:
+        # Ocean fields may be zero in certain regions at land-ocean borders
+        # Removing these may accidentally clip true zeros!
+        vmin = vmin or min([da.where(da > 0).min() for da in das])
+    else:
+        vmin = vmin or min([da.min() for da in das])
+    vmax = vmax or max([da.max() for da in das])
 
     for ax, da in zip(axs, das):
+        lat = da.lat
+        da, lon = add_cyclic_point(da.values, coord=da.lon)
+
         # Use our own locator because the default locator does not respect vmin/vmax
         levels = mpl.ticker.MaxNLocator(n_level + 1).tick_values(vmin, vmax)
         cset = ax.contourf(
-            da.lon,
-            da.lat,
-            da.values,
+            lon,
+            lat,
+            da,
             levels,
             transform=ccrs.PlateCarree(),
             vmin=vmin,
@@ -188,9 +200,9 @@ def plot_field(
 
         if highlight_contour is not None:
             c_highlight = ax.contour(
-                da.lon,
-                da.lat,
-                da.values,
+                lon,
+                lat,
+                da,
                 [highlight_contour],
                 transform=ccrs.PlateCarree(),
                 colors="C1",

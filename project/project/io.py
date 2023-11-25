@@ -1,6 +1,6 @@
 import dataclasses
 import warnings
-from typing import Optional
+from typing import Optional, Callable, Self
 import xesmf as xe
 import platform
 
@@ -9,6 +9,7 @@ import xarray as xr
 
 from project.grid import Regridder
 from project.logger import get_logger
+from project.units import convert_to_si_units, convert_thetaot700_to_ohc700
 
 logger = get_logger(__name__)
 
@@ -19,10 +20,21 @@ class CMIP6Variable:
     id: str  # id in CMIP dataset
     table: str
     pl: Optional[float] = None
+    postprocess_fn: Optional[Callable[[xr.DataArray], xr.DataArray]] = None
+
+    @staticmethod
+    def from_list(vars_str: list[str]) -> list["CMIP6Variable"]:
+        vars = []
+        for var in vars_str:
+            if var in VARIABLES:
+                vars.append(VARIABLES.get(var))
+            else:
+                raise ValueError(f"Unknown variable name {var}")
+        return vars
 
 
 VARIABLES = {
-    "zg500": CMIP6Variable("zg500", "zg", "Amon", 500e2),
+    "zg500": CMIP6Variable("zg500", "zg", "Amon", pl=500e2),
     "pr": CMIP6Variable("pr", "pr", "Amon"),
     "ts": CMIP6Variable("ts", "ts", "Amon"),
     "psl": CMIP6Variable("psl", "psl", "Amon"),
@@ -33,7 +45,11 @@ VARIABLES = {
     "zos": CMIP6Variable("zos", "zos", "Omon"),
     "sos": CMIP6Variable("sos", "sos", "Omon"),
     "thetaot700": CMIP6Variable("thetaot700", "thetaot700", "Emon"),
+    "ohc700": CMIP6Variable(
+        "ohc700", "thetaot700", "Emon", postprocess_fn=convert_thetaot700_to_ohc700
+    ),
 }
+
 
 VARS_AND_DIMS_TO_DROP = [
     "dcpp_init_year",
@@ -48,6 +64,14 @@ VARS_AND_DIMS_TO_DROP = [
     "vertices_longitude",
 ]
 
+# These have to be set again when doing computations
+ATTRS_TO_KEEP = [
+    "standard_name",
+    "long_name",
+    "units",
+    "realm",
+]
+
 
 def get_catalog_location():
     hostname = platform.node()
@@ -56,16 +80,7 @@ def get_catalog_location():
     elif hostname in ["casper-login1"] or hostname.startswith("crhtc"):
         return "/glade/collections/cmip/catalog/intake-esm-datastore/catalogs/glade-cmip6.json"
     else:
-        raise "Unknown host, please specify catalog location"
-
-
-def convert_to_si_units(da: xr.DataArray):
-    units = da.units
-    if units == "degC":
-        da += 273.15
-        da.attrs["units"] = "K"
-
-    return da
+        raise ValueError("Unknown host, please specify catalog location")
 
 
 class IntakeESMLoader:
@@ -78,7 +93,7 @@ class IntakeESMLoader:
     ):
         self.experiment_id = experiment_id
         self.model_id = model_id
-        self.variables = list(map(VARIABLES.get, variables))
+        self.variables = CMIP6Variable.from_list(variables)
         self.cat = None
         self.regridder = Regridder(xe.util.grid_global(2, 2, lon1=359, cf=True))
         self.catalog_location = catalog_location or get_catalog_location()
@@ -89,7 +104,7 @@ class IntakeESMLoader:
             self.cat = intake.open_esm_datastore(self.catalog_location)
 
         logger.info("Loading dataset from catalog")
-        datasets = []
+        dataarrays = []
         for variable in self.variables:
             logger.debug(f" - {variable}")
             query_results = self.cat.search(
@@ -106,10 +121,10 @@ class IntakeESMLoader:
 
             # Ensure there is no ambiguity about dataset (i.e. exactly one is found)
             if len(query_results) == 0:
-                raise "No datasets found for query"
+                raise LookupError("No datasets found for query")
 
             if not all(query_results.nunique().drop(["time_range", "path"]) <= 1):
-                raise "Multiple datasets found for query"
+                raise LookupError("Multiple datasets found for query")
 
             with warnings.catch_warnings(action="ignore"):
                 # Some datasets raise a warning about multiple fill values
@@ -126,24 +141,29 @@ class IntakeESMLoader:
 
             # Select single pressure level if necessary
             if variable.pl is not None:
-                dataset = (
-                    dataset.sel(plev=variable.pl)
-                    .drop_vars("plev")
-                    .rename_vars({variable.id: variable.name})
-                )
+                dataset = dataset.sel(plev=variable.pl).drop_vars("plev")
 
-            dataset = self.regridder.regrid(dataset.realm, dataset)
+            dataset = dataset.rename_vars({variable.id: variable.name})
 
-            # Concert single-variable dataset to DataArray such that attrs are preserved
-            dataset = dataset[variable.name]
+            # Convert single-variable dataset to DataArray such that attrs are preserved
+            dataset_attrs = dataset.attrs
+            realm = dataset.realm
+            dataarray = dataset[variable.name].assign_attrs(dataset_attrs)
+            dataarray.attrs = filter(
+                lambda kv: kv[0] in ATTRS_TO_KEEP, dataarray.attrs.items()
+            )
 
-            dataset = convert_to_si_units(dataset)
+            dataarray = convert_to_si_units(dataarray)
+            if variable.postprocess_fn is not None:
+                dataarray = variable.postprocess_fn(dataarray)
 
-            datasets.append(dataset)
+            dataarray = self.regridder.regrid(realm, dataarray)
 
-        datasets = xr.combine_by_coords(datasets)
+            dataarrays.append(dataarray)
 
-        return datasets
+        dataarrays = xr.combine_by_coords(dataarrays)
+
+        return dataarrays
 
 
 if __name__ == "__main__":
