@@ -7,8 +7,8 @@ import platform
 import intake
 import xarray as xr
 
-from project.project.grid import Regridder
-from project.project.logger import get_logger
+from project.grid import Regridder
+from project.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -35,6 +35,19 @@ VARIABLES = {
     "thetaot700": CMIP6Variable("thetaot700", "thetaot700", "Emon"),
 }
 
+VARS_AND_DIMS_TO_DROP = [
+    "dcpp_init_year",
+    "member_id",
+    "time_bnds",
+    "lat_bnds",
+    "lon_bnds",
+    "height",
+    "depth",
+    "vertices",
+    "vertices_latitude",
+    "vertices_longitude",
+]
+
 
 def get_catalog_location():
     hostname = platform.node()
@@ -44,6 +57,15 @@ def get_catalog_location():
         return "/glade/collections/cmip/catalog/intake-esm-datastore/catalogs/glade-cmip6.json"
     else:
         raise "Unknown host, please specify catalog location"
+
+
+def convert_to_si_units(da: xr.DataArray):
+    units = da.units
+    if units == "degC":
+        da += 273.15
+        da.attrs["units"] = "K"
+
+    return da
 
 
 class IntakeESMLoader:
@@ -58,7 +80,7 @@ class IntakeESMLoader:
         self.model_id = model_id
         self.variables = list(map(VARIABLES.get, variables))
         self.cat = None
-        self.regridder = Regridder(xe.util.grid_global(2, 2, lon1=359))
+        self.regridder = Regridder(xe.util.grid_global(2, 2, lon1=359, cf=True))
         self.catalog_location = catalog_location or get_catalog_location()
 
     def load_dataset(self):
@@ -66,7 +88,7 @@ class IntakeESMLoader:
             logger.debug(f"Opening catalog {self.catalog_location}")
             self.cat = intake.open_esm_datastore(self.catalog_location)
 
-        logger.info("Loading dataset from GLADE")
+        logger.info("Loading dataset from catalog")
         datasets = []
         for variable in self.variables:
             logger.debug(f" - {variable}")
@@ -96,18 +118,13 @@ class IntakeESMLoader:
             dataset = (
                 next(iter(dataset.values()))
                 .drop_vars(
-                    [
-                        "dcpp_init_year",
-                        "member_id",
-                        "time_bnds",
-                        "lat_bnds",
-                        "lon_bnds",
-                    ],
+                    VARS_AND_DIMS_TO_DROP,
                     errors="ignore",
                 )
                 .squeeze()
             )
 
+            # Select single pressure level if necessary
             if variable.pl is not None:
                 dataset = (
                     dataset.sel(plev=variable.pl)
@@ -115,11 +132,16 @@ class IntakeESMLoader:
                     .rename_vars({variable.id: variable.name})
                 )
 
-            # dataset = self.regridder.regrid(dataset.realm, dataset)
+            dataset = self.regridder.regrid(dataset.realm, dataset)
+
+            # Concert single-variable dataset to DataArray such that attrs are preserved
+            dataset = dataset[variable.name]
+
+            dataset = convert_to_si_units(dataset)
 
             datasets.append(dataset)
 
-        # datasets = xr.combine_by_coords(datasets, combine_attrs="drop")
+        datasets = xr.combine_by_coords(datasets)
 
         return datasets
 
@@ -141,6 +163,6 @@ if __name__ == "__main__":
             "thetaot700",
         ],
     )
-    # loader = GLADELoader("historical", "MPI-ESM1-2-LR", ["zg500", "pr"])
+    # loader = IntakeESMLoader("historical", "MPI-ESM1-2-LR", ["zg500", "pr"])
     mpidata = loader.load_dataset()
     print(mpidata)

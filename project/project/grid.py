@@ -11,4 +11,6 @@ class Regridder:
             self.regridders[realm] = xe.Regridder(
                 dataset, self.target_grid, "bilinear", ignore_degenerate=True
             )
-        return self.regridders[realm](dataset, keep_attrs=True)
+        return self.regridders[realm](dataset, keep_attrs=True).drop_vars(
+            ["latitude_longitude"]
+        )
