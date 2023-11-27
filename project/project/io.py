@@ -181,7 +181,7 @@ class IntakeESMLoader:
             dataarrays.append(dataarray)
 
         # Merge all fields
-        dataarrays = xr.combine_by_coords(dataarrays)
+        dataarrays = xr.combine_by_coords(dataarrays).drop_vars("latitude_longitude")
 
         return dataarrays
 
