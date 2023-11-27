@@ -1,13 +1,17 @@
 import dataclasses
-import warnings
-from typing import Optional, Callable, Self
-import xesmf as xe
 import platform
+import warnings
+from typing import Optional, Callable
 
 import intake
 import xarray as xr
 
-from project.grid import Regridder
+from project.grid import (
+    Regridder,
+    GLOBAL_GRID,
+    mask_greenland_and_antarctica,
+    mask_poles,
+)
 from project.logger import get_logger
 from project.units import convert_to_si_units, convert_thetaot700_to_ohc700
 
@@ -20,7 +24,7 @@ class CMIP6Variable:
     id: str  # id in CMIP dataset
     table: str
     pl: Optional[float] = None
-    postprocess_fn: Optional[Callable[[xr.DataArray], xr.DataArray]] = None
+    postprocess_fns: list[Callable[[xr.DataArray], xr.DataArray]] = None
 
     @staticmethod
     def from_list(vars_str: list[str]) -> list["CMIP6Variable"]:
@@ -33,20 +37,39 @@ class CMIP6Variable:
         return vars
 
 
+# Atmospheric variables tend towards zero at poles
+# Ocean variables are non-zero above some regions of Greenland and Antarctica
+# We need to mask these to prevent distortion
 VARIABLES = {
-    "zg500": CMIP6Variable("zg500", "zg", "Amon", pl=500e2),
-    "pr": CMIP6Variable("pr", "pr", "Amon"),
-    "ts": CMIP6Variable("ts", "ts", "Amon"),
-    "psl": CMIP6Variable("psl", "psl", "Amon"),
-    "rsut": CMIP6Variable("rsut", "rsut", "Amon"),
-    "rlut": CMIP6Variable("rlut", "rlut", "Amon"),
-    "tas": CMIP6Variable("tas", "tas", "Amon"),
-    "tos": CMIP6Variable("tos", "tos", "Omon"),
-    "zos": CMIP6Variable("zos", "zos", "Omon"),
-    "sos": CMIP6Variable("sos", "sos", "Omon"),
-    "thetaot700": CMIP6Variable("thetaot700", "thetaot700", "Emon"),
+    "zg500": CMIP6Variable(
+        "zg500", "zg", "Amon", pl=500e2, postprocess_fns=[mask_poles]
+    ),
+    "pr": CMIP6Variable("pr", "pr", "Amon", postprocess_fns=[mask_poles]),
+    "ts": CMIP6Variable("ts", "ts", "Amon", postprocess_fns=[mask_poles]),
+    "psl": CMIP6Variable("psl", "psl", "Amon", postprocess_fns=[mask_poles]),
+    "rsut": CMIP6Variable("rsut", "rsut", "Amon", postprocess_fns=[mask_poles]),
+    "rlut": CMIP6Variable("rlut", "rlut", "Amon", postprocess_fns=[mask_poles]),
+    "tas": CMIP6Variable("tas", "tas", "Amon", postprocess_fns=[mask_poles]),
+    "tos": CMIP6Variable(
+        "tos", "tos", "Omon", postprocess_fns=[mask_greenland_and_antarctica]
+    ),
+    "zos": CMIP6Variable(
+        "zos", "zos", "Omon", postprocess_fns=[mask_greenland_and_antarctica]
+    ),
+    "sos": CMIP6Variable(
+        "sos", "sos", "Omon", postprocess_fns=[mask_greenland_and_antarctica]
+    ),
+    "thetaot700": CMIP6Variable(
+        "thetaot700",
+        "thetaot700",
+        "Emon",
+        postprocess_fns=[mask_greenland_and_antarctica],
+    ),
     "ohc700": CMIP6Variable(
-        "ohc700", "thetaot700", "Emon", postprocess_fn=convert_thetaot700_to_ohc700
+        "ohc700",
+        "thetaot700",
+        "Emon",
+        postprocess_fns=[mask_greenland_and_antarctica, convert_thetaot700_to_ohc700],
     ),
 }
 
@@ -95,7 +118,7 @@ class IntakeESMLoader:
         self.model_id = model_id
         self.variables = CMIP6Variable.from_list(variables)
         self.cat = None
-        self.regridder = Regridder(xe.util.grid_global(2, 2, lon1=359, cf=True))
+        self.regridder = Regridder(GLOBAL_GRID)
         self.catalog_location = catalog_location or get_catalog_location()
 
     def load_dataset(self):
@@ -114,7 +137,7 @@ class IntakeESMLoader:
                 table_id=variable.table,
                 variable_id=variable.id,
                 grid_label="gn",
-                time_range="700101-702012",  # TODO remove
+                time_range=["700101-702012", "702101-704012"],  # TODO remove
                 # time_range="000101-005012",  # TODO remove
                 # time_range="185001-186912",  # TODO remove
             )
@@ -128,16 +151,11 @@ class IntakeESMLoader:
 
             with warnings.catch_warnings(action="ignore"):
                 # Some datasets raise a warning about multiple fill values
-                dataset = query_results.to_dataset_dict(progressbar=False)
-            assert len(dataset) == 1
-            dataset = (
-                next(iter(dataset.values()))
-                .drop_vars(
-                    VARS_AND_DIMS_TO_DROP,
-                    errors="ignore",
-                )
-                .squeeze()
-            )
+                dataset = query_results.to_dask(progressbar=False)
+            dataset = dataset.drop_vars(
+                VARS_AND_DIMS_TO_DROP,
+                errors="ignore",
+            ).squeeze()
 
             # Select single pressure level if necessary
             if variable.pl is not None:
@@ -153,14 +171,16 @@ class IntakeESMLoader:
                 lambda kv: kv[0] in ATTRS_TO_KEEP, dataarray.attrs.items()
             )
 
-            dataarray = convert_to_si_units(dataarray)
-            if variable.postprocess_fn is not None:
-                dataarray = variable.postprocess_fn(dataarray)
-
             dataarray = self.regridder.regrid(realm, dataarray)
+
+            dataarray = convert_to_si_units(dataarray)
+            if variable.postprocess_fns:
+                for fn in variable.postprocess_fns:
+                    dataarray = fn(dataarray)
 
             dataarrays.append(dataarray)
 
+        # Merge all fields
         dataarrays = xr.combine_by_coords(dataarrays)
 
         return dataarrays

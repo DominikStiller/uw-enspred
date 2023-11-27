@@ -2,10 +2,10 @@ import os
 from pathlib import Path
 from typing import Union
 
+import cartopy.crs as ccrs
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sb
-import cartopy.crs as ccrs
 from cartopy.util import add_cyclic_point
 
 
@@ -157,7 +157,6 @@ def plot_field(
     vmin=None,
     vmax=None,
     cmap="Blues",
-    ocean_only=False,
     highlight_contour=None,
     rotate_cbar_ticks=False,
     n_level=50,
@@ -170,12 +169,7 @@ def plot_field(
 
     das = [da.load() for da in das]
 
-    if ocean_only:
-        # Ocean fields may be zero in certain regions at land-ocean borders
-        # Removing these may accidentally clip true zeros!
-        vmin = vmin or min([da.where(da > 0).min() for da in das])
-    else:
-        vmin = vmin or min([da.min() for da in das])
+    vmin = vmin or min([da.min() for da in das])
     vmax = vmax or max([da.max() for da in das])
 
     for ax, da in zip(axs, das):

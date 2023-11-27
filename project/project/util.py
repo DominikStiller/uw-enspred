@@ -1,7 +1,7 @@
+from typing import Union
+
 import numpy as np
-import xarray as xr
 from xarray import Dataset, DataArray
-from typing import Optional
 
 
 # def stack_state(ds: Dataset) -> DataArray:
@@ -15,14 +15,19 @@ from typing import Optional
 #     return da.unstack("state").to_dataset("field")
 
 
-def stack_state(ds: Dataset) -> DataArray:
+def stack_state(ds: Union[Dataset, DataArray]) -> DataArray:
+    if isinstance(ds, DataArray):
+        ds = ds.to_dataset()
     return ds.to_stacked_array(
         "state", sample_dims=["time"], variable_dim="field", name=""
     ).transpose()
 
 
 def unstack_state(da: DataArray) -> Dataset:
-    return da.to_unstacked_dataset("state")
+    ds = da.to_unstacked_dataset("state")
+    if "state" in ds.dims:
+        ds = ds.unstack("state")
+    return ds
 
 
 def inverse(da: DataArray):
@@ -33,3 +38,7 @@ def matrix_power(da: DataArray, n: int):
     return DataArray(
         np.linalg.matrix_power(np.atleast_2d(da.values), n), coords=da.coords
     )
+
+
+def is_dask_array(arr):
+    return hasattr(arr, "dask")
