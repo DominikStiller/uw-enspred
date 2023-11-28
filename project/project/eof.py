@@ -1,12 +1,13 @@
 from enum import Enum, auto
 from typing import Optional
 
+import dask
 import numpy as np
 import xarray as xr
 from numpy.typing import ArrayLike
 
 from project.logger import get_logger
-from project.util import is_dask_array, stack_state
+from project.util import is_dask_array
 
 logger = get_logger(__name__)
 
@@ -46,7 +47,7 @@ class EOF:
         da = da.fillna(0)
 
         if method == EOFMethod.DASK and is_dask_array(da):
-            U, S, V = da.linalg.svd_compressed(da.data, self.rank)
+            U, S, V = dask.array.linalg.svd_compressed(da.data, self.rank)
             self.U = U.compute().T
             self.S = S.compute()
         else:
@@ -83,64 +84,3 @@ class EOF:
         else:
             # Single vector
             return xr.DataArray(projected, coords=dict(eof=self.state_coords))
-
-
-class Detrend:
-    # TODO actually make detrend, not just demean
-    def __init__(self):
-        self.mean: xr.DataArray = None
-
-    def fit(self, ds: xr.DataArray):
-        self.mean = ds.mean(dim="time")
-
-    def forward(self, da: xr.DataArray) -> xr.DataArray:
-        # De-trend
-        return da - self.mean
-
-    def backward(self, da: xr.DataArray) -> xr.DataArray:
-        # Add trend
-        return da + self.mean
-
-
-class TwoStepEOF:
-    def __init__(self, k, l, direct_fields: list[str] = None):
-        self.k = k
-        self.l = l
-        self.detrend: Detrend = Detrend()
-        self.eofs_individual: dict[str, EOF] = {}
-        self.variances: Optional[xr.DataArray] = None
-        self.eof_joint: EOF = EOF(self.l)
-
-    def fit(self, ds: xr.Dataset):
-        logger.info("Calculating field variances")
-        self.variances = ds.var().compute()
-
-        da = stack_state(ds)
-
-        logger.info("Detrending data")
-        self.detrend.fit(da)
-        da = self.detrend.forward(da)
-        da = da.fillna(0)
-
-        ds_eof = {}
-
-        # TODO add latitude weighting, also for backwards
-
-        for field in ds.keys():
-            logger.info(f"Fitting EOF for {field}")
-
-            da_var = da.sel(field=field)
-
-            eof_individual = EOF(self.k)
-            eof_individual.fit(da_var)
-            ds_eof[field] = eof_individual.project_forwards(da_var)
-            self.eofs_individual[str(field)] = eof_individual
-
-        ds_eof = xr.Dataset(ds_eof)
-        da_eof_normalized = stack_state(ds_eof / self.variances)
-
-        logger.info("Fitting joint EOF")
-        self.eof_joint.fit(da_eof_normalized)
-        # TODO append whole OHC
-
-        return da_eof_normalized

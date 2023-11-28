@@ -42,4 +42,4 @@ def matrix_power(da: DataArray, n: int):
 
 
 def is_dask_array(arr):
-    return hasattr(arr, "dask")
+    return hasattr(arr.data, "dask")
