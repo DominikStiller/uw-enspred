@@ -181,28 +181,6 @@ class IntakeESMLoader:
             dataarrays.append(dataarray)
 
         # Merge all fields
-        dataarrays = xr.combine_by_coords(dataarrays).drop_vars("latitude_longitude")
+        dataarrays = xr.combine_by_coords(dataarrays)
 
         return dataarrays
-
-
-if __name__ == "__main__":
-    loader = IntakeESMLoader(
-        "past2k",
-        "MPI-ESM1-2-LR",
-        [
-            "zg500",
-            "pr",
-            "psl",
-            "rsut",
-            "rlut",
-            "tas",
-            "tos",
-            "zos",
-            "sos",
-            "thetaot700",
-        ],
-    )
-    # loader = IntakeESMLoader("historical", "MPI-ESM1-2-LR", ["zg500", "pr"])
-    mpidata = loader.load_dataset()
-    print(mpidata)

@@ -6,6 +6,9 @@ def convert_to_si_units(da: xr.DataArray):
     if units == "degC":
         da += 273.15
         da.attrs["units"] = "K"
+    elif units == "0.001":
+        da /= 1000
+        da.attrs["units"] = "1"
 
     return da
 

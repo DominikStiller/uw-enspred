@@ -27,6 +27,7 @@ def mask_greenland_and_antarctica(da: xr.DataArray) -> xr.DataArray:
         regionmask.defined_regions.ar6.land.mask_3D(GLOBAL_GRID)
         .sel(region=[0, 44, 45])
         .any(dim="region")
+        .drop_vars("latitude_longitude")
     )
     return da.where(~mask)
 
