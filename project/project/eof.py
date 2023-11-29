@@ -28,7 +28,7 @@ class EOF:
 
     def _validate_input_vector(self, da: xr.DataArray):
         assert da.ndim <= 2, "Stack state vector before applying EOF"
-        assert da.dims[0] == "state"
+        assert da.dims[0] == "state" or da.dims[0] == "state_eof"
         if da.ndim == 2:
             assert da.dims[1] == "time"
 
@@ -72,7 +72,7 @@ class EOF:
     def project_forwards(self, da: xr.DataArray):
         self._validate_input_vector(da)
 
-        projected = self.U @ self._get_numpy_data(da)
+        projected = self.U @ self._get_numpy_data(da.fillna(0))
         if da.ndim == 2:
             # Multiple vectors (timesteps)
             return xr.DataArray(
@@ -85,7 +85,10 @@ class EOF:
     def project_backwards(self, da: xr.DataArray):
         self._validate_input_vector(da)
 
-        projected = self.U.T @ self._get_numpy_data(da)
+        projected = self.U.T @ self._get_numpy_data(da.fillna(0))
+        projected = np.where(
+            np.broadcast_to(self.na_mask, projected.shape), np.nan, projected
+        )
         if da.ndim == 2:
             # Multiple vectors (timesteps)
             return xr.DataArray(
@@ -93,4 +96,4 @@ class EOF:
             )
         else:
             # Single vector
-            return xr.DataArray(projected, coords=dict(eof=self.state_coords))
+            return xr.DataArray(projected, coords=dict(state=self.state_coords))

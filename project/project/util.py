@@ -1,6 +1,7 @@
 from typing import Union
 
 import numpy as np
+import xarray as xr
 from xarray import Dataset, DataArray
 
 
@@ -42,3 +43,23 @@ def matrix_power(da: DataArray, n: int):
 
 def is_dask_array(arr):
     return hasattr(arr.data, "dask")
+
+
+def field_complement(
+    ds: Union[xr.DataArray, xr.Dataset], other_fields: list[str]
+) -> list[str]:
+    """
+    Returns all field names that are in the dataset but not in other_fields
+
+    Args:
+        ds: the Dataset/DataArray with all fields
+        other_fields: the fields to exclude
+
+    Returns:
+        the field name complement
+    """
+    if isinstance(ds, xr.DataArray):
+        fields = np.unique(ds.field)
+    else:
+        fields = ds.keys()
+    return list(set(fields) - set(other_fields))
