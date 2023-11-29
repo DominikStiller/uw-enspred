@@ -20,7 +20,7 @@ class EOFMethod(Enum):
 class EOF:
     def __init__(self, rank):
         self.rank = rank
-        self.eof_idx = np.arange(self.rank)
+        self.eof_idx: Optional[ArrayLike] = None
         self.U: Optional[ArrayLike] = None
         self.S: Optional[ArrayLike] = None
         self.na_mask: Optional[ArrayLike] = None
@@ -41,16 +41,26 @@ class EOF:
     def fit(self, da: xr.DataArray, method=EOFMethod.DASK):
         self._validate_input_vector(da)
 
+        input_rank = min(da.shape)
+        if input_rank < self.rank:
+            logger.warn(
+                f"Insufficient data for EOF with rank {self.rank}, output rank will be {input_rank}"
+            )
+            self.rank = input_rank
+        self.eof_idx = np.arange(self.rank)
+
         self.state_coords = da.state
 
         self.na_mask = da.isnull().any(dim="time")
         da = da.fillna(0)
 
         if method == EOFMethod.DASK and is_dask_array(da):
+            logger.debug("Calculating EOFs using Dask")
             U, S, V = dask.array.linalg.svd_compressed(da.data, self.rank)
             self.U = U.compute().T
             self.S = S.compute()
         else:
+            logger.debug("Calculating EOFs using NumPy")
             U, S, V = np.linalg.svd(self._get_numpy_data(da), full_matrices=False)
             self.U = U[:, : self.rank].T
             self.S = U[: self.rank]

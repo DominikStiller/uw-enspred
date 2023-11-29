@@ -18,18 +18,31 @@ class Detrend:
         self.coeffs: Optional[xr.DataArray] = None
 
     def fit(self, da: xr.DataArray):
+        da = da.dropna("state")
+
         self.time_mean = da.time.mean()
         self.state_mean = da.mean(dim="time")
+
+        time_demeaned = np.atleast_2d(da.time - self.time_mean).T
+        state_demeaned = (da - self.state_mean).data.T
+
+        if time_demeaned.dtype == np.dtype("timedelta64[ns]"):
+            # timedeltas need to be converted to pure numbers
+            time_demeaned = time_demeaned.astype("int64")
+
         coeffs, _, _, _ = dask.array.linalg.lstsq(
-            dask.array.from_array(np.atleast_2d(da.time - self.time_mean).T),
-            (da - self.state_mean).data.T,
+            dask.array.from_array(time_demeaned), state_demeaned
         )
         self.coeffs = xr.DataArray(
             coeffs.compute()[0, :], coords=dict(state=da.state)
         ).squeeze()
 
     def _linear_trend(self, da: xr.DataArray) -> xr.DataArray:
-        return self.state_mean + (da.time - self.time_mean) @ self.coeffs
+        time_demeaned = da.time - self.time_mean
+        if time_demeaned.dtype == np.dtype("timedelta64[ns]"):
+            time_demeaned = time_demeaned.astype("int64")
+
+        return self.state_mean + time_demeaned @ self.coeffs
 
     def forward(self, da: xr.DataArray) -> xr.DataArray:
         # De-trend

@@ -39,5 +39,8 @@ class TestDetrend(unittest.TestCase):
 
         detrend = Detrend()
         detrend.fit(da)
-        da_detrended = detrend.forward(da)
+        da_detrended = detrend.forward(da).compute()
         self.assertTrue(np.allclose(da_detrended.data, detrended_sklearn))
+
+        da_retrended = detrend.backward(da_detrended).compute()
+        self.assertTrue(np.allclose(da_retrended.data, da.data))

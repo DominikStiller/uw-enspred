@@ -24,10 +24,9 @@ def stack_state(ds: Union[Dataset, DataArray]) -> DataArray:
 
 
 def unstack_state(da: DataArray) -> Dataset:
-    # ds = da.to_unstacked_dataset("state")
-    ds = da.unstack("state")
-    # if "state" in ds.dims:
-    #     ds = ds.unstack("state")
+    ds = da.to_unstacked_dataset("state")
+    if "state" in ds.dims:
+        ds = ds.unstack("state")
     return ds
 
 
