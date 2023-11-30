@@ -18,8 +18,6 @@ class Detrend:
         self.coeffs: Optional[xr.DataArray] = None
 
     def fit(self, da: xr.DataArray):
-        da = da.dropna("state")
-
         self.time_mean = da.time.mean()
         self.state_mean = da.mean(dim="time")
 
@@ -53,6 +51,25 @@ class Detrend:
         return da + self._linear_trend(da)
 
 
+class NanMask:
+    def __init__(self):
+        self.nan_mask: Optional[xr.DataArray] = None
+
+    def fit(self, da: xr.DataArray):
+        self.nan_mask = np.isnan(da).all("time").compute()
+
+    def forward(self, da: xr.DataArray) -> xr.DataArray:
+        return da.loc[~self.nan_mask]
+
+    def backward(self, da: xr.DataArray) -> xr.DataArray:
+        decompressed = np.empty((len(self.nan_mask.state), len(da.time)))
+        decompressed[~self.nan_mask] = da.values
+        decompressed[self.nan_mask] = np.nan
+        return xr.DataArray(
+            decompressed, coords=dict(state=self.nan_mask.state, time=da.time)
+        )
+
+
 class PhysicalSpaceForecastSpaceMapper:
     def __init__(
         self,
@@ -76,6 +93,8 @@ class PhysicalSpaceForecastSpaceMapper:
         self.direct_fields = direct_fields
         self.standardized_initially_fields = standardized_initially_fields or []
 
+        self.original_field_order: Optional[list[str]] = None
+        self.nan_mask = NanMask()
         self.detrend: Detrend = Detrend()
         self.eofs_individual: dict[str, EOF] = {}
         self.standard_deviations: Optional[xr.Dataset] = None
@@ -85,21 +104,22 @@ class PhysicalSpaceForecastSpaceMapper:
         logger.info("PhysicalSpaceForecastSpaceMapper.fit()")
         logger.info("Calculating field variances")
 
+        self.original_field_order = list(ds.keys())
         self.standard_deviations = ds.std().compute()
 
         da = stack_state(ds)
 
+        self.nan_mask.fit(da)
+        da = self.nan_mask.forward(da)
+
         logger.info("Detrending data")
         self.detrend.fit(da)
         da = self.detrend.forward(da)
-        da = da.fillna(0)
 
         if self.standardized_initially_fields:
-            da = unstack_state(da)
             for field in self.standardized_initially_fields:
                 logger.info(f"Standardizing {field} before individual EOF")
-                da[field] /= self.standard_deviations[field]
-            da = stack_state(da)
+                da.loc[da.field == field] /= self.standard_deviations[field]
 
         ds_eof = {}
 
@@ -129,20 +149,18 @@ class PhysicalSpaceForecastSpaceMapper:
     def forward(self, ds: xr.Dataset) -> xr.DataArray:
         logger.info("PhysicalSpaceForecastSpaceMapper.forward()")
         da = stack_state(ds)
+        da = self.nan_mask.forward(da)
         da = self.detrend.forward(da)
-        da = da.fillna(0)
 
         if self.standardized_initially_fields:
-            da = unstack_state(da)
             for field in self.standardized_initially_fields:
                 logger.info(f"Standardizing {field} before individual EOF")
-                da[field] /= self.standard_deviations[field]
-            da = stack_state(da)
+                da.loc[da.field == field] /= self.standard_deviations[field]
 
         ds_eof_individual = {}
 
         for field in ds.keys():
-            logger.info(f"Fitting EOF for {field}")
+            logger.info(f"Projecting EOF for {field}")
 
             da_field = da.sel(field=field)
             da_field *= np.sqrt(np.cos(np.radians(da_field.lat)))
@@ -152,7 +170,7 @@ class PhysicalSpaceForecastSpaceMapper:
             ].project_forwards(da_field)
 
         ds_eof_normalized = xr.Dataset(ds_eof_individual)
-        for field in ds_eof_individual.keys():
+        for field in ds_eof_normalized.keys():
             if field not in self.standardized_initially_fields:
                 logger.info(f"Standardizing {field} after individual EOF")
                 ds_eof_normalized[field] /= self.standard_deviations[field]
@@ -160,7 +178,7 @@ class PhysicalSpaceForecastSpaceMapper:
         not_direct_fields = field_complement(ds_eof_normalized, self.direct_fields)
         ds_eof_normalized_for_second_eof = ds_eof_normalized[not_direct_fields]
 
-        logger.info(f"Fitting joint EOF for {', '.join(not_direct_fields)}")
+        logger.info(f"Projecting joint EOF for {', '.join(not_direct_fields)}")
         da_eof_joint = self.eof_joint.project_forwards(
             stack_state(ds_eof_normalized_for_second_eof)
         )
@@ -173,6 +191,58 @@ class PhysicalSpaceForecastSpaceMapper:
         )
         return da_eof_joint_and_direct
 
-    def backward(self, ds: xr.Dataset) -> xr.DataArray:
-        # TODO next
-        pass
+    def backward(self, da: xr.DataArray) -> xr.Dataset:
+        da_eof_joint = da.sel(field="joint")
+        ds_eof_direct = unstack_state(da)[self.direct_fields].isel(
+            state_eof=slice(None, self.k)
+        )
+
+        ds_eof_joint_backprojected = unstack_state(
+            self.eof_joint.project_backwards(da_eof_joint)
+        )
+
+        ds_eof_normalized = xr.merge([ds_eof_joint_backprojected, ds_eof_direct])
+        for field in ds_eof_normalized.keys():
+            if field not in self.standardized_initially_fields:
+                logger.info(f"De-standardizing {field} after individual EOF")
+                ds_eof_normalized[field] *= self.standard_deviations[field]
+
+        da_physical_individual = {}
+
+        for field in ds_eof_normalized.keys():
+            logger.info(f"Back-projecting EOF for {field}")
+
+            da_field = ds_eof_normalized[field]
+
+            da_field_physical = self.eofs_individual[str(field)].project_backwards(
+                da_field
+            )
+
+            da_field_physical /= np.sqrt(np.cos(np.radians(da_field_physical.lat)))
+            da_field_physical = da_field_physical.expand_dims("field").assign_coords(
+                field=[field]
+            )
+            da_field_physical = da_field_physical.unstack("state").stack(
+                state=["field", "lat", "lon"]
+            )
+            da_physical_individual[field] = da_field_physical
+
+        # Ensure that we stack fields in the order that is expected by NanMask
+        da_physical_individual = xr.concat(
+            [da_physical_individual[field] for field in self.original_field_order],
+            dim="state",
+        ).T
+
+        if self.standardized_initially_fields:
+            for field in self.standardized_initially_fields:
+                logger.info(f"De-standardizing {field} before individual EOF")
+                da_physical_individual.loc[
+                    da_physical_individual.field == field
+                ] *= self.standard_deviations[field]
+
+        da = self.detrend.backward(da_physical_individual)
+        da = self.nan_mask.backward(da)
+
+        ds = unstack_state(da)
+
+        return ds

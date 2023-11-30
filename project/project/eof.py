@@ -23,7 +23,6 @@ class EOF:
         self.eof_idx: Optional[ArrayLike] = None
         self.U: Optional[ArrayLike] = None
         self.S: Optional[ArrayLike] = None
-        self.na_mask: Optional[ArrayLike] = None
         self.state_coords = None
 
     def _validate_input_vector(self, da: xr.DataArray):
@@ -31,6 +30,7 @@ class EOF:
         assert da.dims[0] == "state" or da.dims[0] == "state_eof"
         if da.ndim == 2:
             assert da.dims[1] == "time"
+        assert da.size == da.count(), "nan is not allowed in EOF input data"
 
     def _get_numpy_data(self, da: xr.DataArray) -> ArrayLike:
         if is_dask_array(da):
@@ -51,9 +51,6 @@ class EOF:
 
         self.state_coords = da.state
 
-        self.na_mask = da.isnull().any(dim="time")
-        da = da.fillna(0)
-
         if method == EOFMethod.DASK and is_dask_array(da):
             logger.debug("Calculating EOFs using Dask")
             U, S, V = dask.array.linalg.svd_compressed(da.data, self.rank)
@@ -66,13 +63,12 @@ class EOF:
             self.S = U[: self.rank]
 
     def get_component(self, n):
-        comp = np.where(self.na_mask, np.nan, self.U[n, :])
-        return xr.DataArray(comp, coords=dict(state=self.state_coords))
+        return xr.DataArray(self.U[n, :], coords=dict(state=self.state_coords))
 
     def project_forwards(self, da: xr.DataArray):
         self._validate_input_vector(da)
 
-        projected = self.U @ self._get_numpy_data(da.fillna(0))
+        projected = self.U @ self._get_numpy_data(da)
         if da.ndim == 2:
             # Multiple vectors (timesteps)
             return xr.DataArray(
@@ -85,10 +81,7 @@ class EOF:
     def project_backwards(self, da: xr.DataArray):
         self._validate_input_vector(da)
 
-        projected = self.U.T @ self._get_numpy_data(da.fillna(0))
-        projected = np.where(
-            np.broadcast_to(self.na_mask, projected.shape), np.nan, projected
-        )
+        projected = self.U.T @ self._get_numpy_data(da)
         if da.ndim == 2:
             # Multiple vectors (timesteps)
             return xr.DataArray(
