@@ -1,3 +1,6 @@
+import pickle
+from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import dask
@@ -100,6 +103,16 @@ class PhysicalSpaceForecastSpaceMapper:
         self.standard_deviations: Optional[xr.Dataset] = None
         self.eof_joint: EOF = EOF(self.l)
 
+    def save(self, directory: Path):
+        timestamp = datetime.now().replace(microsecond=0).isoformat().replace(":", "-")
+        outfile = directory / f"mapper-{timestamp}.pkl"
+        pickle.dump(self, outfile.open("wb"))
+        logger.info(f"Saved mapper to {outfile}")
+
+    @classmethod
+    def load(cls, file: Path):
+        return pickle.load(file.open("rb"))
+
     def fit(self, ds: xr.Dataset):
         logger.info("PhysicalSpaceForecastSpaceMapper.fit()")
         logger.info("Calculating field variances")
@@ -119,7 +132,8 @@ class PhysicalSpaceForecastSpaceMapper:
         if self.standardized_initially_fields:
             for field in self.standardized_initially_fields:
                 logger.info(f"Standardizing {field} before individual EOF")
-                da.loc[da.field == field] /= self.standard_deviations[field]
+                # In-place assignment is very slow, not sure what to do about it
+                da.loc[da.field == field] /= self.standard_deviations[field].item()
 
         ds_eof = {}
 
@@ -138,7 +152,7 @@ class PhysicalSpaceForecastSpaceMapper:
         for field in ds_eof.keys():
             if field not in self.standardized_initially_fields:
                 logger.info(f"Standardizing {field} after individual EOF")
-                ds_eof_normalized[field] /= self.standard_deviations[field]
+                ds_eof_normalized[field] /= self.standard_deviations[field].item()
 
         not_direct_fields = field_complement(ds_eof_normalized, self.direct_fields)
         ds_eof_normalized_for_second_eof = ds_eof_normalized[not_direct_fields]
@@ -155,7 +169,7 @@ class PhysicalSpaceForecastSpaceMapper:
         if self.standardized_initially_fields:
             for field in self.standardized_initially_fields:
                 logger.info(f"Standardizing {field} before individual EOF")
-                da.loc[da.field == field] /= self.standard_deviations[field]
+                da.loc[da.field == field] /= self.standard_deviations[field].item()
 
         ds_eof_individual = {}
 
@@ -173,7 +187,7 @@ class PhysicalSpaceForecastSpaceMapper:
         for field in ds_eof_normalized.keys():
             if field not in self.standardized_initially_fields:
                 logger.info(f"Standardizing {field} after individual EOF")
-                ds_eof_normalized[field] /= self.standard_deviations[field]
+                ds_eof_normalized[field] /= self.standard_deviations[field].item()
 
         not_direct_fields = field_complement(ds_eof_normalized, self.direct_fields)
         ds_eof_normalized_for_second_eof = ds_eof_normalized[not_direct_fields]
@@ -205,7 +219,7 @@ class PhysicalSpaceForecastSpaceMapper:
         for field in ds_eof_normalized.keys():
             if field not in self.standardized_initially_fields:
                 logger.info(f"De-standardizing {field} after individual EOF")
-                ds_eof_normalized[field] *= self.standard_deviations[field]
+                ds_eof_normalized[field] *= self.standard_deviations[field].item()
 
         da_physical_individual = {}
 
@@ -238,7 +252,7 @@ class PhysicalSpaceForecastSpaceMapper:
                 logger.info(f"De-standardizing {field} before individual EOF")
                 da_physical_individual.loc[
                     da_physical_individual.field == field
-                ] *= self.standard_deviations[field]
+                ] *= self.standard_deviations[field].item()
 
         da = self.detrend.backward(da_physical_individual)
         da = self.nan_mask.backward(da)
