@@ -1,5 +1,4 @@
 import pickle
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -9,7 +8,7 @@ import xarray as xr
 
 from project.eof import EOF
 from project.logger import get_logger
-from project.util import stack_state, unstack_state, field_complement
+from project.util import stack_state, unstack_state, field_complement, get_timestamp
 
 logger = get_logger(__name__)
 
@@ -104,8 +103,7 @@ class PhysicalSpaceForecastSpaceMapper:
         self.eof_joint: EOF = EOF(self.l)
 
     def save(self, directory: Path):
-        timestamp = datetime.now().replace(microsecond=0).isoformat().replace(":", "-")
-        outfile = directory / f"mapper-{timestamp}.pkl"
+        outfile = directory / f"mapper-{get_timestamp()}.pkl"
         pickle.dump(self, outfile.open("wb"))
         logger.info(f"Saved mapper to {outfile}")
 
@@ -199,6 +197,7 @@ class PhysicalSpaceForecastSpaceMapper:
         da_eof_joint = da_eof_joint.expand_dims("field").assign_coords(field=["joint"])
         da_eof_joint = da_eof_joint.stack(dict(state=["field", "state_eof"])).T
 
+        logger.info(f"Appending direct fields for {', '.join(self.direct_fields)}")
         da_eof_joint_and_direct = xr.concat(
             [da_eof_joint, stack_state(ds_eof_normalized[self.direct_fields])],
             dim="state",

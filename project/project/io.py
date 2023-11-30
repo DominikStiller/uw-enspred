@@ -1,6 +1,7 @@
 import dataclasses
 import platform
 import warnings
+from pathlib import Path
 from typing import Optional, Callable
 
 import intake
@@ -14,6 +15,7 @@ from project.grid import (
 )
 from project.logger import get_logger
 from project.units import convert_to_si_units, convert_thetaot700_to_ohc700
+from project.util import get_timestamp
 
 logger = get_logger(__name__)
 
@@ -186,3 +188,13 @@ class IntakeESMLoader:
         dataarrays = xr.combine_by_coords(dataarrays)
 
         return dataarrays
+
+
+def save_mfdataset(ds: xr.Dataset, directory: Path):
+    directory /= get_timestamp()
+    directory.mkdir()
+
+    years, datasets = zip(*ds.groupby("time.year"))
+    paths = [directory / f"{y}.nc" for y in years]
+    xr.save_mfdataset(datasets, paths)
+    logger.info(f"Saved dataset to {directory}")

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Union
 
 import numpy as np
@@ -63,3 +64,7 @@ def field_complement(
     else:
         fields = ds.keys()
     return list(set(fields) - set(other_fields))
+
+
+def get_timestamp():
+    return datetime.now().replace(microsecond=0).isoformat().replace(":", "-")
