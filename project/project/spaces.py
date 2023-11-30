@@ -112,6 +112,12 @@ class PhysicalSpaceForecastSpaceMapper:
         return pickle.load(file.open("rb"))
 
     def fit(self, ds: xr.Dataset):
+        self._fit(ds, also_forward=False)
+
+    def fit_and_forward(self, ds: xr.Dataset):
+        return self._fit(ds, also_forward=True)
+
+    def _fit(self, ds: xr.Dataset, also_forward):
         logger.info("PhysicalSpaceForecastSpaceMapper.fit()")
         logger.info("Calculating field variances")
 
@@ -157,6 +163,23 @@ class PhysicalSpaceForecastSpaceMapper:
 
         logger.info(f"Fitting joint EOF for {', '.join(not_direct_fields)}")
         self.eof_joint.fit(stack_state(ds_eof_normalized_for_second_eof))
+
+        if also_forward:
+            logger.info(f"Projecting joint EOF for {', '.join(not_direct_fields)}")
+            da_eof_joint = self.eof_joint.project_forwards(
+                stack_state(ds_eof_normalized_for_second_eof)
+            )
+            da_eof_joint = da_eof_joint.expand_dims("field").assign_coords(
+                field=["joint"]
+            )
+            da_eof_joint = da_eof_joint.stack(dict(state=["field", "state_eof"])).T
+
+            logger.info(f"Appending direct fields for {', '.join(self.direct_fields)}")
+            da_eof_joint_and_direct = xr.concat(
+                [da_eof_joint, stack_state(ds_eof_normalized[self.direct_fields])],
+                dim="state",
+            )
+            return da_eof_joint_and_direct
 
     def forward(self, ds: xr.Dataset) -> xr.DataArray:
         logger.info("PhysicalSpaceForecastSpaceMapper.forward()")
