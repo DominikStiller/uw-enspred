@@ -121,7 +121,7 @@ class IntakeESMLoader:
         self.regridder = Regridder(GLOBAL_GRID)
         self.catalog_location = catalog_location or get_catalog_location()
 
-    def load_dataset(self):
+    def load_dataset(self, timerange: list[str] = None):
         if self.cat is None:
             logger.debug(f"Opening catalog {self.catalog_location}")
             self.cat = intake.open_esm_datastore(self.catalog_location)
@@ -130,17 +130,19 @@ class IntakeESMLoader:
         dataarrays = []
         for variable in self.variables:
             logger.debug(f" - {variable}")
-            query_results = self.cat.search(
+
+            query = dict(
                 experiment_id=self.experiment_id,
                 source_id=self.model_id,
                 member_id="r1i1p1f1",
                 table_id=variable.table,
                 variable_id=variable.id,
                 grid_label="gn",
-                time_range=["700101-702012", "702101-704012"],  # TODO remove
-                # time_range="000101-005012",  # TODO remove
-                # time_range="185001-186912",  # TODO remove
             )
+            if timerange:
+                query["time_range"] = timerange
+
+            query_results = self.cat.search(**query)
 
             # Ensure there is no ambiguity about dataset (i.e. exactly one is found)
             if len(query_results) == 0:
