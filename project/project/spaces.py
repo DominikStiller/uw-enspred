@@ -26,7 +26,11 @@ class Detrend:
         self.coeffs: Optional[dask.array.Array] = None
 
     def _get_time(self, time: dask.array.Array) -> dask.array.Array:
-        if isinstance(time[0], cftime.datetime):
+        if time.ndim > 0:
+            time_sentinel = time[0]
+        else:
+            time_sentinel = time.item()
+        if isinstance(time_sentinel, cftime.datetime):
             time = cftime.date2num(
                 time,
                 "days since 1970-01-01",
@@ -37,7 +41,7 @@ class Detrend:
         time = self._get_time(time)
 
         self.time_mean = time.mean()
-        self.data_mean = data.mean(axis=0).persist()[np.newaxis, :]
+        self.data_mean = data.mean(axis=1).persist()[:, np.newaxis]
 
         time_demeaned: dask.array.Array = np.atleast_2d(time - self.time_mean).T
         state_demeaned: dask.array.Array = (data - self.data_mean).T
@@ -57,9 +61,10 @@ class Detrend:
         # De-trend
         return data - self._linear_trend(time)
 
-    def backward(self, days: dask.array.Array, time: dask.array.Array) -> dask.array.Array:
+    def backward(self, data: dask.array.Array, time: dask.array.Array) -> dask.array.Array:
+        print(data.shape)
         # Add trend
-        return days + self._linear_trend(time)
+        return data + self._linear_trend(time)
 
 
 class NanMask:

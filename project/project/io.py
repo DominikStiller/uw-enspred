@@ -190,3 +190,11 @@ def save_mfdataset(ds: xr.Dataset, directory: Path):
     paths = [directory / f"{y}.nc" for y in years]
     xr.save_mfdataset(datasets, paths)
     logger.info(f"Saved dataset to {directory}")
+
+
+def save_dataset(ds: xr.Dataset, directory: Path):
+    directory /= get_timestamp()
+    directory.mkdir(parents=True)
+
+    ds.to_netcdf(directory / "data.nc")
+    logger.info(f"Saved dataset to {directory}")
