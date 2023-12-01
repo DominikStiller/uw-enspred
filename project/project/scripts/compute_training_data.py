@@ -1,3 +1,6 @@
+import numpy as np
+import xarray as xr
+
 from project.io import IntakeESMLoader, save_mfdataset
 from project.spaces import PhysicalSpaceForecastSpaceMapper
 from project.util import get_data_path
@@ -29,6 +32,7 @@ if __name__ == "__main__":
     )
 
     mapper = PhysicalSpaceForecastSpaceMapper(20, 400, ["ohc700"], ["pr"])
-    ds_eof = mapper.fit_and_forward(ds)
+    array_eof = mapper.fit_and_forward(ds)
+    ds_eof = xr.DataArray(array_eof, coords=dict(state=np.arange(array_eof.shape[0]), time=ds.time))
     mapper.save(data_path / "mapper")
-    save_mfdataset(ds_eof.reset_index("state").to_dataset(name="data"), data_path / "training_data")
+    save_mfdataset(ds_eof.to_dataset(name="data"), data_path / "training_data")
