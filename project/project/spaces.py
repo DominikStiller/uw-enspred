@@ -113,6 +113,7 @@ class PhysicalSpaceForecastSpaceMapper:
         self.not_direct_fields: list[str] = None
 
     def save(self, directory: Path):
+        directory.mkdir()
         outfile = directory / f"mapper-{get_timestamp()}.pkl"
         pickle.dump(self, outfile.open("wb"))
         logger.info(f"Saved mapper to {outfile}")
@@ -133,14 +134,14 @@ class PhysicalSpaceForecastSpaceMapper:
         self.fields = list(map(str, ds.keys()))
         self.not_direct_fields = list_complement(self.fields, self.direct_fields)
 
-        # Split dataset into Dask arrays
+        logger.info("Splitting dataset into Dask arrays")
         data_raw: dict[str, dask.array.Array] = {}
         for field in self.fields:
             stacked_state = stack_state(ds[field])
             data_raw[field] = stacked_state.data
             self.state_coords[field] = stacked_state.state
 
-        # Mask out nans
+        logger.info("Masking nans")
         data_nonan: dict[str, dask.array.Array] = {}
         for field in self.fields:
             self.nan_masks[field] = NanMask()
@@ -203,13 +204,13 @@ class PhysicalSpaceForecastSpaceMapper:
     def forward(self, ds: xr.Dataset) -> dask.array.Array:
         logger.info("PhysicalSpaceForecastSpaceMapper.forward()")
 
-        # Split dataset into Dask arrays
+        logger.info("Splitting dataset into Dask arrays")
         data_raw: dict[str, dask.array.Array] = {}
         for field in self.fields:
             stacked_state = stack_state(ds[field])
             data_raw[field] = stacked_state.data
 
-        # Mask out nans
+        logger.info("Masking nans")
         data_nonan: dict[str, dask.array.Array] = {}
         for field in self.fields:
             data_nonan[field] = self.nan_masks[field].forward(data_raw[field])
@@ -292,10 +293,12 @@ class PhysicalSpaceForecastSpaceMapper:
                 data_detrended[field] *= self.standard_deviations[field]
             data_nonan[field] = self.detrends[field].backward(data_detrended[field], time.data)
 
+        logger.info("Un-masking nans")
         data_raw: dict[str, dask.array.Array] = {}
         for field in self.fields:
             data_raw[field] = self.nan_masks[field].backward(data_nonan[field])
 
+        logger.info("Merging Dask arrays into dataset")
         data_xarray: dict[str, xr.DataArray] = {}
         for field in self.fields:
             data_xarray[field] = (

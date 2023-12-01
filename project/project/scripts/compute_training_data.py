@@ -31,7 +31,4 @@ if __name__ == "__main__":
     mapper = PhysicalSpaceForecastSpaceMapper(20, 400, ["ohc700"], ["pr"])
     ds_eof = mapper.fit_and_forward(ds)
     mapper.save(data_path / "mapper")
-    save_mfdataset(
-        ds_eof.reset_index("state").to_dataset(name="data"),
-        data_path / "training_data"
-    )
+    save_mfdataset(ds_eof.reset_index("state").to_dataset(name="data"), data_path / "training_data")

@@ -122,7 +122,7 @@ class IntakeESMLoader:
             self.cat = intake.open_esm_datastore(self.catalog_location)
 
         logger.info("Loading dataset from catalog")
-        dataarrays = []
+        dataarrays = {}
         for variable in self.variables:
             logger.debug(f" - {variable}")
 
@@ -172,7 +172,9 @@ class IntakeESMLoader:
                 for fn in variable.postprocess_fns:
                     dataarray = fn(dataarray)
 
-            dataarrays.append(dataarray)
+            dataarrays[variable] = dataarray
+
+        dataarrays = dict(sorted(dataarrays.items()))
 
         # Merge all fields
         dataarrays = xr.combine_by_coords(dataarrays)
