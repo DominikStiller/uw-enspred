@@ -44,7 +44,7 @@ class Detrend:
         )
         self.coeffs = coeffs.persist().squeeze()
 
-    def _linear_trend(self, da: xr.DataArray) -> xr.DataArray:
+    def _linear_trend(self, da: xr.DataArray) -> dask.array.Array:
         time = self._get_time(da)
         time_demeaned = time - self.time_mean
 
@@ -61,19 +61,19 @@ class Detrend:
 
 class NanMask:
     def __init__(self):
-        self.nan_mask: Optional[xr.DataArray] = None
+        self.nan_mask: Optional[dask.array.Array] = None
 
-    def fit(self, da: xr.DataArray):
-        self.nan_mask = np.isnan(da).all("time").compute()
+    def fit(self, da: dask.array.Array):
+        self.nan_mask = np.isnan(da).all(axis=1).compute()
 
-    def forward(self, da: xr.DataArray) -> xr.DataArray:
-        return da.loc[~self.nan_mask]
+    def forward(self, da: dask.array.Array) -> dask.array.Array:
+        return da[~self.nan_mask]
 
-    def backward(self, da: xr.DataArray) -> xr.DataArray:
-        decompressed = np.empty((len(self.nan_mask.state), len(da.time)))
-        decompressed[~self.nan_mask] = da.values
+    def backward(self, da: dask.array.Array) -> dask.array.Array:
+        decompressed = dask.array.empty((len(self.nan_mask), da.shape[1]))
+        decompressed[~self.nan_mask] = da
         decompressed[self.nan_mask] = np.nan
-        return xr.DataArray(decompressed, coords=dict(state=self.nan_mask.state, time=da.time))
+        return decompressed
 
 
 class PhysicalSpaceForecastSpaceMapper:
