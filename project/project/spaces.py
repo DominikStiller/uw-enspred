@@ -118,7 +118,7 @@ class PhysicalSpaceForecastSpaceMapper:
         self.not_direct_fields: list[str] = None
 
     def save(self, directory: Path):
-        directory.mkdir(parents=True)
+        directory.mkdir(parents=True, exist_ok=True)
         outfile = directory / f"mapper-{get_timestamp()}.pkl"
         pickle.dump(self, outfile.open("wb"))
         logger.info(f"Saved mapper to {outfile}")
