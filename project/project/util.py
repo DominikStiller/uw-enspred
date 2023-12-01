@@ -37,18 +37,14 @@ def inverse(da: DataArray):
 
 
 def matrix_power(da: DataArray, n: int):
-    return DataArray(
-        np.linalg.matrix_power(np.atleast_2d(da.values), n), coords=da.coords
-    )
+    return DataArray(np.linalg.matrix_power(np.atleast_2d(da.values), n), coords=da.coords)
 
 
 def is_dask_array(arr):
     return hasattr(arr.data, "dask")
 
 
-def field_complement(
-    ds: Union[xr.DataArray, xr.Dataset], other_fields: list[str]
-) -> list[str]:
+def field_complement(ds: Union[xr.DataArray, xr.Dataset], other_fields: list[str]) -> list[str]:
     """
     Returns all field names that are in the dataset but not in other_fields
 

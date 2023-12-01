@@ -71,9 +71,7 @@ class EOF:
         projected = self.U @ self._get_numpy_data(da)
         if da.ndim == 2:
             # Multiple vectors (timesteps)
-            return xr.DataArray(
-                projected, coords=dict(state_eof=self.eof_idx, time=da.time)
-            )
+            return xr.DataArray(projected, coords=dict(state_eof=self.eof_idx, time=da.time))
         else:
             # Single vector
             return xr.DataArray(projected, coords=dict(state_eof=self.eof_idx))
@@ -84,9 +82,7 @@ class EOF:
         projected = self.U.T @ self._get_numpy_data(da)
         if da.ndim == 2:
             # Multiple vectors (timesteps)
-            return xr.DataArray(
-                projected, coords=dict(state=self.state_coords, time=da.time)
-            )
+            return xr.DataArray(projected, coords=dict(state=self.state_coords, time=da.time))
         else:
             # Single vector
             return xr.DataArray(projected, coords=dict(state=self.state_coords))

@@ -50,9 +50,7 @@ class LIM:
 
     def forecast(self, initial: Dataset, n_steps):
         initial = stack_state(initial)
-        assert initial.state.equals(
-            self.state_coords
-        ), "Initial state must match training data."
+        assert initial.state.equals(self.state_coords), "Initial state must match training data."
         initial_np = np.squeeze(initial.values)
 
         forecast_np = np.zeros((self.Nx, n_steps + 1))
@@ -60,9 +58,7 @@ class LIM:
         forecast_np[:, 0] = initial_np
 
         for i in range(n_steps - 1):
-            forecast_np[:, i + 1] = (
-                np.linalg.matrix_power(self.G_tau0, i + 1) @ initial_np
-            )
+            forecast_np[:, i + 1] = np.linalg.matrix_power(self.G_tau0, i + 1) @ initial_np
 
         forecast_np += self.mean
 

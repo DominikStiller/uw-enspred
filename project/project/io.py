@@ -43,24 +43,16 @@ class CMIP6Variable:
 # Ocean variables are non-zero above some regions of Greenland and Antarctica
 # We need to mask these to prevent distortion
 VARIABLES = {
-    "zg500": CMIP6Variable(
-        "zg500", "zg", "Amon", pl=500e2, postprocess_fns=[mask_poles]
-    ),
+    "zg500": CMIP6Variable("zg500", "zg", "Amon", pl=500e2, postprocess_fns=[mask_poles]),
     "pr": CMIP6Variable("pr", "pr", "Amon", postprocess_fns=[mask_poles]),
     "ts": CMIP6Variable("ts", "ts", "Amon", postprocess_fns=[mask_poles]),
     "psl": CMIP6Variable("psl", "psl", "Amon", postprocess_fns=[mask_poles]),
     "rsut": CMIP6Variable("rsut", "rsut", "Amon", postprocess_fns=[mask_poles]),
     "rlut": CMIP6Variable("rlut", "rlut", "Amon", postprocess_fns=[mask_poles]),
     "tas": CMIP6Variable("tas", "tas", "Amon", postprocess_fns=[mask_poles]),
-    "tos": CMIP6Variable(
-        "tos", "tos", "Omon", postprocess_fns=[mask_greenland_and_antarctica]
-    ),
-    "zos": CMIP6Variable(
-        "zos", "zos", "Omon", postprocess_fns=[mask_greenland_and_antarctica]
-    ),
-    "sos": CMIP6Variable(
-        "sos", "sos", "Omon", postprocess_fns=[mask_greenland_and_antarctica]
-    ),
+    "tos": CMIP6Variable("tos", "tos", "Omon", postprocess_fns=[mask_greenland_and_antarctica]),
+    "zos": CMIP6Variable("zos", "zos", "Omon", postprocess_fns=[mask_greenland_and_antarctica]),
+    "sos": CMIP6Variable("sos", "sos", "Omon", postprocess_fns=[mask_greenland_and_antarctica]),
     "thetaot700": CMIP6Variable(
         "thetaot700",
         "thetaot700",
@@ -149,7 +141,6 @@ class IntakeESMLoader:
             # Ensure there is no ambiguity about dataset (i.e. exactly one is found)
             if len(query_results) == 0:
                 raise LookupError("No datasets found for query")
-
             if not all(query_results.nunique().drop(["time_range", "path"]) <= 1):
                 raise LookupError("Multiple datasets found for query")
 
@@ -171,9 +162,7 @@ class IntakeESMLoader:
             dataset_attrs = dataset.attrs
             realm = dataset.realm
             dataarray = dataset[variable.name].assign_attrs(dataset_attrs)
-            dataarray.attrs = filter(
-                lambda kv: kv[0] in ATTRS_TO_KEEP, dataarray.attrs.items()
-            )
+            dataarray.attrs = filter(lambda kv: kv[0] in ATTRS_TO_KEEP, dataarray.attrs.items())
 
             dataarray = self.regridder.regrid(realm, dataarray)
 

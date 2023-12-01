@@ -113,18 +113,14 @@ def format_plot(
         x_minor_locator_ax = x_minor_locator
         if not x_minor_locator_ax:
             if ax.get_xscale() == "log":
-                x_minor_locator_ax = mpl.ticker.LogLocator(
-                    base=10, subs="auto", numticks=100
-                )
+                x_minor_locator_ax = mpl.ticker.LogLocator(base=10, subs="auto", numticks=100)
             else:
                 x_minor_locator_ax = mpl.ticker.AutoMinorLocator()
 
         y_minor_locator_ax = y_minor_locator
         if not y_minor_locator_ax:
             if ax.get_yscale() == "log":
-                y_minor_locator_ax = mpl.ticker.LogLocator(
-                    base=10, subs="auto", numticks=100
-                )
+                y_minor_locator_ax = mpl.ticker.LogLocator(base=10, subs="auto", numticks=100)
             else:
                 y_minor_locator_ax = mpl.ticker.AutoMinorLocator()
 
