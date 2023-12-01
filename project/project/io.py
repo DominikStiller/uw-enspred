@@ -177,7 +177,7 @@ class IntakeESMLoader:
         dataarrays = dict(sorted(dataarrays.items()))
 
         # Merge all fields
-        dataarrays = xr.combine_by_coords(dataarrays)
+        dataarrays = xr.combine_by_coords(dataarrays.values())
 
         return dataarrays
 
