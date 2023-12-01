@@ -172,7 +172,7 @@ class IntakeESMLoader:
                 for fn in variable.postprocess_fns:
                     dataarray = fn(dataarray)
 
-            dataarrays[variable] = dataarray
+            dataarrays[variable.name] = dataarray
 
         dataarrays = dict(sorted(dataarrays.items()))
 
