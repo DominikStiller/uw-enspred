@@ -184,7 +184,7 @@ class IntakeESMLoader:
 
 def save_mfdataset(ds: xr.Dataset, directory: Path):
     directory /= get_timestamp()
-    directory.mkdir()
+    directory.mkdir(parents=True)
 
     years, datasets = zip(*ds.groupby("time.year"))
     paths = [directory / f"{y}.nc" for y in years]
