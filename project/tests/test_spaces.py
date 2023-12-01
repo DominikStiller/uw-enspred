@@ -20,7 +20,7 @@ class TestDetrend(unittest.TestCase):
 
         detrend = Detrend()
         detrend.fit(da)
-        self.assertTrue(np.allclose(coeffs.squeeze(), detrend.coeffs.data))
+        self.assertTrue(np.allclose(coeffs.squeeze(), detrend.coeffs))
 
         da_detrended = detrend.forward(da)
         self.assertTrue(np.allclose(da_detrended.data, 0))

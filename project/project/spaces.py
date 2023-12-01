@@ -2,9 +2,11 @@ import pickle
 from pathlib import Path
 from typing import Optional
 
+import cftime
 import dask
 import numpy as np
 import xarray as xr
+from numpy.typing import NDArray
 
 from project.eof import EOF
 from project.logger import get_logger
@@ -15,34 +17,38 @@ logger = get_logger(__name__)
 
 class Detrend:
     def __init__(self):
-        self.time_mean: Optional[xr.DataArray] = None
-        self.state_mean: Optional[xr.DataArray] = None
-        self.coeffs: Optional[xr.DataArray] = None
+        self.time_mean: Optional[NDArray] = None
+        self.state_mean: Optional[dask.array.Array] = None
+        self.coeffs: Optional[dask.array.Array] = None
+
+    def _get_time(self, da: xr.DataArray) -> NDArray:
+        time = da.time.data
+        if isinstance(time[0], cftime.datetime):
+            time = cftime.date2num(
+                time,
+                "days since 1970-01-01",
+            )
+        return time
 
     def fit(self, da: xr.DataArray):
-        self.time_mean = da.time.mean()
-        self.state_mean = da.mean(dim="time")
+        time = self._get_time(da)
 
-        time_demeaned = np.atleast_2d(da.time - self.time_mean).T
-        state_demeaned = (da - self.state_mean).data.T
+        self.time_mean = time.mean()
+        self.state_mean = da.mean(dim="time").data.persist()[:, np.newaxis]
 
-        if time_demeaned.dtype == np.dtype("timedelta64[ns]"):
-            # timedeltas need to be converted to pure numbers
-            time_demeaned = time_demeaned.astype("int64")
+        time_demeaned: NDArray = np.atleast_2d(time - self.time_mean).T
+        state_demeaned: dask.array.Array = (da.data - self.state_mean).T
 
         coeffs, _, _, _ = dask.array.linalg.lstsq(
             dask.array.from_array(time_demeaned), state_demeaned
         )
-        self.coeffs = xr.DataArray(
-            coeffs.compute()[0, :], coords=dict(state=da.state)
-        ).squeeze()
+        self.coeffs = coeffs.persist().squeeze()
 
     def _linear_trend(self, da: xr.DataArray) -> xr.DataArray:
-        time_demeaned = da.time - self.time_mean
-        if time_demeaned.dtype == np.dtype("timedelta64[ns]"):
-            time_demeaned = time_demeaned.astype("int64")
+        time = self._get_time(da)
+        time_demeaned = time - self.time_mean
 
-        return self.state_mean + time_demeaned @ self.coeffs
+        return self.state_mean + self.coeffs[:, np.newaxis] @ time_demeaned[np.newaxis, :]
 
     def forward(self, da: xr.DataArray) -> xr.DataArray:
         # De-trend
@@ -67,9 +73,7 @@ class NanMask:
         decompressed = np.empty((len(self.nan_mask.state), len(da.time)))
         decompressed[~self.nan_mask] = da.values
         decompressed[self.nan_mask] = np.nan
-        return xr.DataArray(
-            decompressed, coords=dict(state=self.nan_mask.state, time=da.time)
-        )
+        return xr.DataArray(decompressed, coords=dict(state=self.nan_mask.state, time=da.time))
 
 
 class PhysicalSpaceForecastSpaceMapper:
@@ -112,13 +116,14 @@ class PhysicalSpaceForecastSpaceMapper:
         return pickle.load(file.open("rb"))
 
     def fit(self, ds: xr.Dataset):
+        logger.info("PhysicalSpaceForecastSpaceMapper.fit()")
         self._fit(ds, also_forward=False)
 
     def fit_and_forward(self, ds: xr.Dataset):
+        logger.info("PhysicalSpaceForecastSpaceMapper.fit_and_forward()")
         return self._fit(ds, also_forward=True)
 
     def _fit(self, ds: xr.Dataset, also_forward):
-        logger.info("PhysicalSpaceForecastSpaceMapper.fit()")
         logger.info("Calculating field variances")
 
         self.original_field_order = list(ds.keys())
@@ -169,9 +174,7 @@ class PhysicalSpaceForecastSpaceMapper:
             da_eof_joint = self.eof_joint.project_forwards(
                 stack_state(ds_eof_normalized_for_second_eof)
             )
-            da_eof_joint = da_eof_joint.expand_dims("field").assign_coords(
-                field=["joint"]
-            )
+            da_eof_joint = da_eof_joint.expand_dims("field").assign_coords(field=["joint"])
             da_eof_joint = da_eof_joint.stack(dict(state=["field", "state_eof"])).T
 
             logger.info(f"Appending direct fields for {', '.join(self.direct_fields)}")
@@ -183,6 +186,7 @@ class PhysicalSpaceForecastSpaceMapper:
 
     def forward(self, ds: xr.Dataset) -> xr.DataArray:
         logger.info("PhysicalSpaceForecastSpaceMapper.forward()")
+
         da = stack_state(ds)
         da = self.nan_mask.forward(da)
         da = self.detrend.forward(da)
@@ -200,9 +204,7 @@ class PhysicalSpaceForecastSpaceMapper:
             da_field = da.sel(field=field)
             da_field *= np.sqrt(np.cos(np.radians(da_field.lat)))
 
-            ds_eof_individual[field] = self.eofs_individual[
-                str(field)
-            ].project_forwards(da_field)
+            ds_eof_individual[field] = self.eofs_individual[str(field)].project_forwards(da_field)
 
         ds_eof_normalized = xr.Dataset(ds_eof_individual)
         for field in ds_eof_normalized.keys():
@@ -228,14 +230,12 @@ class PhysicalSpaceForecastSpaceMapper:
         return da_eof_joint_and_direct
 
     def backward(self, da: xr.DataArray) -> xr.Dataset:
-        da_eof_joint = da.sel(field="joint")
-        ds_eof_direct = unstack_state(da)[self.direct_fields].isel(
-            state_eof=slice(None, self.k)
-        )
+        logger.info("PhysicalSpaceForecastSpaceMapper.backward()")
 
-        ds_eof_joint_backprojected = unstack_state(
-            self.eof_joint.project_backwards(da_eof_joint)
-        )
+        da_eof_joint = da.sel(field="joint")
+        ds_eof_direct = unstack_state(da)[self.direct_fields].isel(state_eof=slice(None, self.k))
+
+        ds_eof_joint_backprojected = unstack_state(self.eof_joint.project_backwards(da_eof_joint))
 
         ds_eof_normalized = xr.merge([ds_eof_joint_backprojected, ds_eof_direct])
         for field in ds_eof_normalized.keys():
@@ -250,14 +250,10 @@ class PhysicalSpaceForecastSpaceMapper:
 
             da_field = ds_eof_normalized[field]
 
-            da_field_physical = self.eofs_individual[str(field)].project_backwards(
-                da_field
-            )
+            da_field_physical = self.eofs_individual[str(field)].project_backwards(da_field)
 
             da_field_physical /= np.sqrt(np.cos(np.radians(da_field_physical.lat)))
-            da_field_physical = da_field_physical.expand_dims("field").assign_coords(
-                field=[field]
-            )
+            da_field_physical = da_field_physical.expand_dims("field").assign_coords(field=[field])
             da_field_physical = da_field_physical.unstack("state").stack(
                 state=["field", "lat", "lon"]
             )
