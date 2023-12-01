@@ -24,14 +24,9 @@ if __name__ == "__main__":
             "ohc700",
         ],
     )
-    ds = loader.load_dataset(
-        [
-            "700101-702012",
-            "702101-704012",
-        ]
-    )
+    ds = loader.load_dataset()
 
-    mapper = PhysicalSpaceForecastSpaceMapper(20, 400, ["ohc700"], ["pr"])
+    mapper = PhysicalSpaceForecastSpaceMapper(400, 30, ["ohc700"], ["pr"])
     array_eof = mapper.fit_and_forward(ds)
     ds_eof = xr.DataArray(array_eof, coords=dict(state=np.arange(array_eof.shape[0]), time=ds.time))
     mapper.save(data_path / "mapper")
