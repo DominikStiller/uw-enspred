@@ -39,12 +39,12 @@ class EOF:
         self.eof_idx = np.arange(self.rank)
 
         if method == EOFMethod.DASK:
-            logger.debug("Calculating EOFs using Dask")
+            logger.debug(f"Calculating EOFs using Dask (rank = {self.rank})")
             U, S, V = dask.array.linalg.svd_compressed(data, self.rank)
             self.U = U.T.persist()
             self.S = S.persist()
         else:
-            logger.debug("Calculating EOFs using NumPy")
+            logger.debug(f"Calculating EOFs using NumPy (rank = {self.rank})")
             U, S, V = np.linalg.svd(data.compute(), full_matrices=False)
             self.U = U[:, : self.rank].T
             self.S = U[: self.rank]
