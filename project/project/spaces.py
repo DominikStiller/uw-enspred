@@ -10,7 +10,11 @@ from numpy.typing import NDArray
 
 from project.eof import EOF
 from project.logger import get_logger
-from project.util import stack_state, unstack_state, field_complement, get_timestamp
+from project.util import (
+    stack_state,
+    get_timestamp,
+    list_complement,
+)
 
 logger = get_logger(__name__)
 
@@ -18,11 +22,10 @@ logger = get_logger(__name__)
 class Detrend:
     def __init__(self):
         self.time_mean: Optional[NDArray] = None
-        self.state_mean: Optional[dask.array.Array] = None
+        self.data_mean: Optional[dask.array.Array] = None
         self.coeffs: Optional[dask.array.Array] = None
 
-    def _get_time(self, da: xr.DataArray) -> NDArray:
-        time = da.time.data
+    def _get_time(self, time: dask.array.Array) -> dask.array.Array:
         if isinstance(time[0], cftime.datetime):
             time = cftime.date2num(
                 time,
@@ -30,33 +33,33 @@ class Detrend:
             )
         return time
 
-    def fit(self, da: xr.DataArray):
-        time = self._get_time(da)
+    def fit(self, data: dask.array.Array, time: dask.array.Array):
+        time = self._get_time(time)
 
         self.time_mean = time.mean()
-        self.state_mean = da.mean(dim="time").data.persist()[:, np.newaxis]
+        self.data_mean = data.mean(axis=0).persist()[np.newaxis, :]
 
-        time_demeaned: NDArray = np.atleast_2d(time - self.time_mean).T
-        state_demeaned: dask.array.Array = (da.data - self.state_mean).T
+        time_demeaned: dask.array.Array = np.atleast_2d(time - self.time_mean).T
+        state_demeaned: dask.array.Array = (data - self.data_mean).T
 
         coeffs, _, _, _ = dask.array.linalg.lstsq(
             dask.array.from_array(time_demeaned), state_demeaned
         )
         self.coeffs = coeffs.persist().squeeze()
 
-    def _linear_trend(self, da: xr.DataArray) -> dask.array.Array:
-        time = self._get_time(da)
+    def _linear_trend(self, time: dask.array.Array) -> dask.array.Array:
+        time = self._get_time(time)
         time_demeaned = time - self.time_mean
 
-        return self.state_mean + self.coeffs[:, np.newaxis] @ time_demeaned[np.newaxis, :]
+        return self.data_mean + self.coeffs[:, np.newaxis] @ time_demeaned[np.newaxis, :]
 
-    def forward(self, da: xr.DataArray) -> xr.DataArray:
+    def forward(self, data: dask.array.Array, time: dask.array.Array) -> dask.array.Array:
         # De-trend
-        return da - self._linear_trend(da)
+        return data - self._linear_trend(time)
 
-    def backward(self, da: xr.DataArray) -> xr.DataArray:
+    def backward(self, days: dask.array.Array, time: dask.array.Array) -> dask.array.Array:
         # Add trend
-        return da + self._linear_trend(da)
+        return days + self._linear_trend(time)
 
 
 class NanMask:
@@ -99,12 +102,15 @@ class PhysicalSpaceForecastSpaceMapper:
         self.direct_fields = direct_fields
         self.standardized_initially_fields = standardized_initially_fields or []
 
-        self.original_field_order: Optional[list[str]] = None
-        self.nan_mask = NanMask()
-        self.detrend: Detrend = Detrend()
+        self.fields: list[str] = None
+        self.nan_masks: dict[str, NanMask] = {}
+        self.detrends: dict[str, Detrend] = {}
         self.eofs_individual: dict[str, EOF] = {}
-        self.standard_deviations: Optional[xr.Dataset] = None
+        self.standard_deviations: dict[str, float] = {}
         self.eof_joint: EOF = EOF(self.l)
+        self.lats: dict[str, dask.array.Array] = {}
+        self.state_coords: dict[str, xr.DataArray] = {}
+        self.not_direct_fields: list[str] = None
 
     def save(self, directory: Path):
         outfile = directory / f"mapper-{get_timestamp()}.pkl"
@@ -119,162 +125,188 @@ class PhysicalSpaceForecastSpaceMapper:
         logger.info("PhysicalSpaceForecastSpaceMapper.fit()")
         self._fit(ds, also_forward=False)
 
-    def fit_and_forward(self, ds: xr.Dataset):
+    def fit_and_forward(self, ds: xr.Dataset) -> dask.array.Array:
         logger.info("PhysicalSpaceForecastSpaceMapper.fit_and_forward()")
         return self._fit(ds, also_forward=True)
 
     def _fit(self, ds: xr.Dataset, also_forward):
+        self.fields = list(map(str, ds.keys()))
+        self.not_direct_fields = list_complement(self.fields, self.direct_fields)
+
+        # Split dataset into Dask arrays
+        data_raw: dict[str, dask.array.Array] = {}
+        for field in self.fields:
+            stacked_state = stack_state(ds[field])
+            data_raw[field] = stacked_state.data
+            self.state_coords[field] = stacked_state.state
+
+        # Mask out nans
+        data_nonan: dict[str, dask.array.Array] = {}
+        for field in self.fields:
+            self.nan_masks[field] = NanMask()
+            self.nan_masks[field].fit(data_raw[field])
+            data_nonan[field] = self.nan_masks[field].forward(data_raw[field])
+            self.lats[field] = self.nan_masks[field].forward(self.state_coords[field].lat.data)[
+                :, np.newaxis
+            ]
+
         logger.info("Calculating field variances")
-
-        self.original_field_order = list(ds.keys())
-        self.standard_deviations = ds.std().compute()
-
-        da = stack_state(ds)
-
-        self.nan_mask.fit(da)
-        da = self.nan_mask.forward(da)
+        self.standard_deviations = {
+            field: data_nonan[field].std().compute() for field in self.fields
+        }
 
         logger.info("Detrending data")
-        self.detrend.fit(da)
-        da = self.detrend.forward(da)
+        data_detrended: dict[str, dask.array.Array] = {}
+        for field in self.fields:
+            self.detrends[field] = Detrend()
+            self.detrends[field].fit(data_nonan[field], ds.time.data)
+            data_detrended[field] = self.detrends[field].forward(data_nonan[field], ds.time.data)
 
-        if self.standardized_initially_fields:
-            for field in self.standardized_initially_fields:
+            if field in self.standardized_initially_fields:
                 logger.info(f"Standardizing {field} before individual EOF")
-                # In-place assignment is very slow, not sure what to do about it
-                da.loc[da.field == field] /= self.standard_deviations[field].item()
+                data_detrended[field] /= self.standard_deviations[field]
 
-        ds_eof = {}
+        data_eof_individual: dict[str, dask.array.Array] = {}
 
-        for field in ds.keys():
+        for field in self.fields:
+            data_field = data_detrended[field]
+            data_field *= np.sqrt(np.cos(np.radians(self.lats[field])))
+
+            self.eofs_individual[field] = EOF(self.k)
+
             logger.info(f"Fitting EOF for {field}")
+            self.eofs_individual[field].fit(data_field)
+            logger.info(f"Projecting EOF for {field}")
+            data_eof_individual[field] = self.eofs_individual[field].project_forwards(data_field)
 
-            da_field = da.sel(field=field)
-            da_field *= np.sqrt(np.cos(np.radians(da_field.lat)))
-
-            eof_individual = EOF(self.k)
-            eof_individual.fit(da_field)
-            ds_eof[field] = eof_individual.project_forwards(da_field)
-            self.eofs_individual[str(field)] = eof_individual
-
-        ds_eof_normalized = xr.Dataset(ds_eof)
-        for field in ds_eof.keys():
             if field not in self.standardized_initially_fields:
                 logger.info(f"Standardizing {field} after individual EOF")
-                ds_eof_normalized[field] /= self.standard_deviations[field].item()
+                data_eof_individual[field] /= self.standard_deviations[field]
 
-        not_direct_fields = field_complement(ds_eof_normalized, self.direct_fields)
-        ds_eof_normalized_for_second_eof = ds_eof_normalized[not_direct_fields]
+        data_stacked_for_joint_eof = dask.array.vstack(
+            [data_eof_individual[field] for field in self.not_direct_fields]
+        )
 
-        logger.info(f"Fitting joint EOF for {', '.join(not_direct_fields)}")
-        self.eof_joint.fit(stack_state(ds_eof_normalized_for_second_eof))
+        logger.info(f"Fitting joint EOF for {', '.join(self.not_direct_fields)}")
+        self.eof_joint.fit(data_stacked_for_joint_eof)
 
         if also_forward:
-            logger.info(f"Projecting joint EOF for {', '.join(not_direct_fields)}")
-            da_eof_joint = self.eof_joint.project_forwards(
-                stack_state(ds_eof_normalized_for_second_eof)
-            )
-            da_eof_joint = da_eof_joint.expand_dims("field").assign_coords(field=["joint"])
-            da_eof_joint = da_eof_joint.stack(dict(state=["field", "state_eof"])).T
+            logger.info(f"Projecting joint EOF for {', '.join(self.not_direct_fields)}")
+            data_eof_joint = self.eof_joint.project_forwards(data_stacked_for_joint_eof)
 
             logger.info(f"Appending direct fields for {', '.join(self.direct_fields)}")
-            da_eof_joint_and_direct = xr.concat(
-                [da_eof_joint, stack_state(ds_eof_normalized[self.direct_fields])],
-                dim="state",
+            data_eof_joint_and_direct = dask.array.vstack(
+                [data_eof_joint] + [data_eof_individual[field] for field in self.direct_fields]
             )
-            return da_eof_joint_and_direct
+            return data_eof_joint_and_direct
 
-    def forward(self, ds: xr.Dataset) -> xr.DataArray:
+    def forward(self, ds: xr.Dataset) -> dask.array.Array:
         logger.info("PhysicalSpaceForecastSpaceMapper.forward()")
 
-        da = stack_state(ds)
-        da = self.nan_mask.forward(da)
-        da = self.detrend.forward(da)
+        # Split dataset into Dask arrays
+        data_raw: dict[str, dask.array.Array] = {}
+        for field in self.fields:
+            stacked_state = stack_state(ds[field])
+            data_raw[field] = stacked_state.data
 
-        if self.standardized_initially_fields:
-            for field in self.standardized_initially_fields:
+        # Mask out nans
+        data_nonan: dict[str, dask.array.Array] = {}
+        for field in self.fields:
+            data_nonan[field] = self.nan_masks[field].forward(data_raw[field])
+
+        logger.info("Detrending data")
+        data_detrended: dict[str, dask.array.Array] = {}
+        for field in self.fields:
+            data_detrended[field] = self.detrends[field].forward(data_nonan[field], ds.time.data)
+
+            if field in self.standardized_initially_fields:
                 logger.info(f"Standardizing {field} before individual EOF")
-                da.loc[da.field == field] /= self.standard_deviations[field].item()
+                data_detrended[field] /= self.standard_deviations[field]
 
-        ds_eof_individual = {}
+        data_eof_individual: dict[str, dask.array.Array] = {}
 
-        for field in ds.keys():
+        for field in self.fields:
+            data_field = data_detrended[field]
+            data_field *= np.sqrt(np.cos(np.radians(self.lats[field])))
+
             logger.info(f"Projecting EOF for {field}")
+            data_eof_individual[field] = self.eofs_individual[field].project_forwards(data_field)
 
-            da_field = da.sel(field=field)
-            da_field *= np.sqrt(np.cos(np.radians(da_field.lat)))
-
-            ds_eof_individual[field] = self.eofs_individual[str(field)].project_forwards(da_field)
-
-        ds_eof_normalized = xr.Dataset(ds_eof_individual)
-        for field in ds_eof_normalized.keys():
             if field not in self.standardized_initially_fields:
                 logger.info(f"Standardizing {field} after individual EOF")
-                ds_eof_normalized[field] /= self.standard_deviations[field].item()
+                data_eof_individual[field] /= self.standard_deviations[field]
 
-        not_direct_fields = field_complement(ds_eof_normalized, self.direct_fields)
-        ds_eof_normalized_for_second_eof = ds_eof_normalized[not_direct_fields]
-
-        logger.info(f"Projecting joint EOF for {', '.join(not_direct_fields)}")
-        da_eof_joint = self.eof_joint.project_forwards(
-            stack_state(ds_eof_normalized_for_second_eof)
+        logger.info(f"Projecting joint EOF for {', '.join(self.not_direct_fields)}")
+        data_stacked_for_joint_eof = dask.array.vstack(
+            [data_eof_individual[field] for field in self.not_direct_fields]
         )
-        da_eof_joint = da_eof_joint.expand_dims("field").assign_coords(field=["joint"])
-        da_eof_joint = da_eof_joint.stack(dict(state=["field", "state_eof"])).T
+        data_eof_joint = self.eof_joint.project_forwards(data_stacked_for_joint_eof)
 
         logger.info(f"Appending direct fields for {', '.join(self.direct_fields)}")
-        da_eof_joint_and_direct = xr.concat(
-            [da_eof_joint, stack_state(ds_eof_normalized[self.direct_fields])],
-            dim="state",
+        data_eof_joint_and_direct = dask.array.vstack(
+            [data_eof_joint] + [data_eof_individual[field] for field in self.direct_fields]
         )
-        return da_eof_joint_and_direct
+        return data_eof_joint_and_direct
 
-    def backward(self, da: xr.DataArray) -> xr.Dataset:
+    def backward(self, data: dask.array.Array, time: xr.DataArray) -> xr.Dataset:
         logger.info("PhysicalSpaceForecastSpaceMapper.backward()")
 
-        da_eof_joint = da.sel(field="joint")
-        ds_eof_direct = unstack_state(da)[self.direct_fields].isel(state_eof=slice(None, self.k))
+        data_eof_individual: dict[str, dask.array.Array] = {}
 
-        ds_eof_joint_backprojected = unstack_state(self.eof_joint.project_backwards(da_eof_joint))
+        logger.info(f"Splitting direct fields for {', '.join(self.direct_fields)}")
+        start_row = self.eof_joint.rank
+        for field in self.direct_fields:
+            length = self.eofs_individual[field].rank
+            data_eof_individual[field] = data[start_row : start_row + length]
+            start_row += length
 
-        ds_eof_normalized = xr.merge([ds_eof_joint_backprojected, ds_eof_direct])
-        for field in ds_eof_normalized.keys():
+        logger.info(f"Back-projecting joint EOF for {', '.join(self.not_direct_fields)}")
+        data_eof_joint = data[: self.eof_joint.rank]
+        data_stacked_for_joint_eof = self.eof_joint.project_backwards(data_eof_joint)
+
+        start_row = 0
+        for field in self.not_direct_fields:
+            length = self.eofs_individual[field].rank
+            data_eof_individual[field] = data_stacked_for_joint_eof[start_row : start_row + length]
+            start_row += length
+
+        data_detrended: dict[str, dask.array.Array] = {}
+
+        for field in self.fields:
+            data_field = data_eof_individual[field]
+
             if field not in self.standardized_initially_fields:
                 logger.info(f"De-standardizing {field} after individual EOF")
-                ds_eof_normalized[field] *= self.standard_deviations[field].item()
+                data_field *= self.standard_deviations[field]
 
-        da_physical_individual = {}
-
-        for field in ds_eof_normalized.keys():
             logger.info(f"Back-projecting EOF for {field}")
+            data_detrended[field] = self.eofs_individual[field].project_backwards(data_field)
 
-            da_field = ds_eof_normalized[field]
+            data_detrended[field] /= np.sqrt(np.cos(np.radians(self.lats[field])))
 
-            da_field_physical = self.eofs_individual[str(field)].project_backwards(da_field)
-
-            da_field_physical /= np.sqrt(np.cos(np.radians(da_field_physical.lat)))
-            da_field_physical = da_field_physical.expand_dims("field").assign_coords(field=[field])
-            da_field_physical = da_field_physical.unstack("state").stack(
-                state=["field", "lat", "lon"]
-            )
-            da_physical_individual[field] = da_field_physical
-
-        # Ensure that we stack fields in the order that is expected by NanMask
-        da_physical_individual = xr.concat(
-            [da_physical_individual[field] for field in self.original_field_order],
-            dim="state",
-        ).T
-
-        if self.standardized_initially_fields:
-            for field in self.standardized_initially_fields:
+        logger.info("Re-trending data")
+        data_nonan: dict[str, dask.array.Array] = {}
+        for field in self.fields:
+            if field in self.standardized_initially_fields:
                 logger.info(f"De-standardizing {field} before individual EOF")
-                da_physical_individual.loc[
-                    da_physical_individual.field == field
-                ] *= self.standard_deviations[field].item()
+                data_detrended[field] *= self.standard_deviations[field]
+            data_nonan[field] = self.detrends[field].backward(data_detrended[field], time.data)
 
-        da = self.detrend.backward(da_physical_individual)
-        da = self.nan_mask.backward(da)
+        data_raw: dict[str, dask.array.Array] = {}
+        for field in self.fields:
+            data_raw[field] = self.nan_masks[field].backward(data_nonan[field])
 
-        ds = unstack_state(da)
+        data_xarray: dict[str, xr.DataArray] = {}
+        for field in self.fields:
+            data_xarray[field] = (
+                xr.DataArray(
+                    data_raw[field], coords=dict(state=self.state_coords[field], time=time)
+                )
+                .unstack("state")
+                .squeeze()
+                .drop_vars("field")
+            )
+
+        ds = xr.Dataset(data_xarray)
 
         return ds

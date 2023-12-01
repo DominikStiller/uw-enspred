@@ -59,7 +59,11 @@ def field_complement(ds: Union[xr.DataArray, xr.Dataset], other_fields: list[str
         fields = np.unique(ds.field)
     else:
         fields = ds.keys()
-    return list(set(fields) - set(other_fields))
+    return list_complement(fields, other_fields)
+
+
+def list_complement(elements: list, others: list) -> list:
+    return list(set(elements) - set(others))
 
 
 def get_timestamp():
