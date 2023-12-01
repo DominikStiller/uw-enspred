@@ -4,10 +4,9 @@ from typing import Optional
 import dask
 import numpy as np
 import xarray as xr
-from numpy.typing import ArrayLike
+from numpy.typing import NDArray
 
 from project.logger import get_logger
-from project.util import is_dask_array
 
 logger = get_logger(__name__)
 
@@ -20,28 +19,18 @@ class EOFMethod(Enum):
 class EOF:
     def __init__(self, rank):
         self.rank = rank
-        self.eof_idx: Optional[ArrayLike] = None
-        self.U: Optional[ArrayLike] = None
-        self.S: Optional[ArrayLike] = None
-        self.state_coords = None
+        self.eof_idx: Optional[NDArray] = None
+        self.U: Optional[NDArray] = None
+        self.S: Optional[NDArray] = None
 
-    def _validate_input_vector(self, da: xr.DataArray):
-        assert da.ndim <= 2, "Stack state vector before applying EOF"
-        assert da.dims[0] == "state" or da.dims[0] == "state_eof"
-        if da.ndim == 2:
-            assert da.dims[1] == "time"
-        assert da.size == da.count(), "nan is not allowed in EOF input data"
+    def _validate_input_vector(self, data: dask.array.Array):
+        assert data.ndim <= 2, "Stack state vector before applying EOF"
+        assert not np.isnan(data).any(), "nan is not allowed in EOF input data"
 
-    def _get_numpy_data(self, da: xr.DataArray) -> ArrayLike:
-        if is_dask_array(da):
-            return da.data.compute()
-        else:
-            return da.values
+    def fit(self, data: dask.array.Array, method=EOFMethod.DASK):
+        self._validate_input_vector(data)
 
-    def fit(self, da: xr.DataArray, method=EOFMethod.DASK):
-        self._validate_input_vector(da)
-
-        input_rank = min(da.shape)
+        input_rank = min(data.shape)
         if input_rank < self.rank:
             logger.warn(
                 f"Insufficient data for EOF with rank {self.rank}, output rank will be {input_rank}"
@@ -49,26 +38,43 @@ class EOF:
             self.rank = input_rank
         self.eof_idx = np.arange(self.rank)
 
-        self.state_coords = da.state
-
-        if method == EOFMethod.DASK and is_dask_array(da):
+        if method == EOFMethod.DASK:
             logger.debug("Calculating EOFs using Dask")
-            U, S, V = dask.array.linalg.svd_compressed(da.data, self.rank)
-            self.U = U.compute().T
-            self.S = S.compute()
+            U, S, V = dask.array.linalg.svd_compressed(data, self.rank)
+            self.U = U.T.persist()
+            self.S = S.persist()
         else:
             logger.debug("Calculating EOFs using NumPy")
-            U, S, V = np.linalg.svd(self._get_numpy_data(da), full_matrices=False)
+            U, S, V = np.linalg.svd(data.compute(), full_matrices=False)
             self.U = U[:, : self.rank].T
             self.S = U[: self.rank]
 
     def get_component(self, n):
-        return xr.DataArray(self.U[n, :], coords=dict(state=self.state_coords))
+        return self.U[n, :]
+
+    def project_forwards(self, data: dask.array.Array) -> dask.array.Array:
+        self._validate_input_vector(data)
+        return self.U @ data
+
+    def project_backwards(self, data: dask.array.Array) -> dask.array.Array:
+        self._validate_input_vector(data)
+        return self.U.T @ data
+
+
+class EOFXArray(EOF):
+    def __init__(self, rank):
+        super().__init__(rank)
+        self.state_coords = None
+
+    def fit(self, da: xr.DataArray, method=EOFMethod.DASK):
+        self.state_coords = da.state
+        super().fit(da.data, method)
+
+    def get_component(self, n):
+        return xr.DataArray(super().get_component(n), coords=dict(state=self.state_coords))
 
     def project_forwards(self, da: xr.DataArray):
-        self._validate_input_vector(da)
-
-        projected = self.U @ self._get_numpy_data(da)
+        projected = super().project_forwards(da.data)
         if da.ndim == 2:
             # Multiple vectors (timesteps)
             return xr.DataArray(projected, coords=dict(state_eof=self.eof_idx, time=da.time))
@@ -77,9 +83,7 @@ class EOF:
             return xr.DataArray(projected, coords=dict(state_eof=self.eof_idx))
 
     def project_backwards(self, da: xr.DataArray):
-        self._validate_input_vector(da)
-
-        projected = self.U.T @ self._get_numpy_data(da)
+        projected = super().project_backwards(da.data)
         if da.ndim == 2:
             # Multiple vectors (timesteps)
             return xr.DataArray(projected, coords=dict(state=self.state_coords, time=da.time))
