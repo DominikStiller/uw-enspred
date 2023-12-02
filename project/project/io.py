@@ -190,8 +190,13 @@ def save_mfdataset(ds: xr.Dataset, directory: Path):
     directory /= get_timestamp()
     directory.mkdir(parents=True)
 
-    years, datasets = zip(*ds.groupby("time.year"))
-    paths = [directory / f"{y}.nc" for y in years]
+    year = ds["time"].dt.year
+    ds["century"] = ((year - year[0]) / 100).astype(int)
+
+    indexes, datasets = zip(*ds.groupby("century"))
+    paths = [directory / f"{i}.nc" for i in indexes]
+
+    logger.info(f"Saving dataset")
     xr.save_mfdataset(datasets, paths)
     logger.info(f"Saved dataset to {directory}")
 

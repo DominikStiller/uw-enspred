@@ -1,7 +1,8 @@
 import numpy as np
 import xarray as xr
+from dask.diagnostics import ProgressBar
 
-from project.io import IntakeESMLoader, save_dataset
+from project.io import IntakeESMLoader, save_mfdataset
 from project.spaces import PhysicalSpaceForecastSpaceMapper
 from project.util import get_data_path
 
@@ -30,4 +31,5 @@ if __name__ == "__main__":
     array_eof = mapper.fit_and_forward(ds)
     ds_eof = xr.DataArray(array_eof, coords=dict(state=np.arange(array_eof.shape[0]), time=ds.time))
     mapper.save(data_path / "mapper")
-    save_dataset(ds_eof.to_dataset(name="data"), data_path / "training_data")
+    with ProgressBar():
+        save_mfdataset(ds_eof.to_dataset(name="data"), data_path / "training_data")
