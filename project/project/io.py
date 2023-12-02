@@ -94,7 +94,11 @@ def get_catalog_location():
     hostname = platform.node()
     if hostname in ["enkf"]:
         return "/home/enkf6/dstiller/CMIP6/catalog.json"
-    elif hostname in ["casper-login1"] or hostname.startswith("crhtc"):
+    elif (
+        hostname in ["casper-login1"]
+        or hostname.startswith("crhtc")
+        or hostname.startswith("casper")
+    ):
         # return "/glade/collections/cmip/catalog/intake-esm-datastore/catalogs/glade-cmip6.json"
         return "/glade/work/dstiller/CMIP6/catalog.json"
     else:

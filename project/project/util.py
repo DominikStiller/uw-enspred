@@ -76,7 +76,11 @@ def get_data_path() -> Path:
     hostname = platform.node()
     if hostname in ["enkf"]:
         return Path("/home/enkf6/dstiller/enspred")
-    elif hostname in ["casper-login1"] or hostname.startswith("crhtc"):
+    elif (
+        hostname in ["casper-login1"]
+        or hostname.startswith("crhtc")
+        or hostname.startswith("casper")
+    ):
         return Path("/glade/work/dstiller/enspred/project")
     else:
         raise ValueError("Unknown host")
