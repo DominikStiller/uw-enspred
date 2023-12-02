@@ -2,7 +2,7 @@
 #PBS -N compute_training_data
 #PBS -A UWAS0131
 #PBS -l select=1:ncpus=8:mpiprocs=1:mem=80GB
-#PBS -l walltime=10:00:00
+#PBS -l walltime=24:00:00
 #PBS -q casper
 #PBS -j oe
 #PBS -m abe
