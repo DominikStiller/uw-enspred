@@ -6,6 +6,7 @@ from typing import Optional, Callable
 
 import intake
 import xarray as xr
+from xarray import SerializationWarning
 
 from project.grid import (
     Regridder,
@@ -18,6 +19,8 @@ from project.units import convert_to_si_units, convert_thetaot700_to_ohc700
 from project.util import get_timestamp
 
 logger = get_logger(__name__)
+
+warnings.filterwarnings("ignore", category=SerializationWarning)
 
 
 @dataclasses.dataclass
@@ -149,9 +152,9 @@ class IntakeESMLoader:
             if not all(query_results.nunique().drop(["time_range", "path"]) <= 1):
                 raise LookupError("Multiple datasets found for query")
 
-            with warnings.catch_warnings(action="ignore"):
-                # Some datasets raise a warning about multiple fill values
-                dataset = query_results.to_dask(progressbar=False)
+            dataset = query_results.to_dask(
+                progressbar=False, xarray_open_kwargs=dict(chunks=dict(time=5000))
+            )
             dataset = dataset.drop_vars(
                 VARS_AND_DIMS_TO_DROP,
                 errors="ignore",
