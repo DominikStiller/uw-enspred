@@ -12,7 +12,7 @@ from project.util import get_data_path
 logger = get_logger(__name__)
 
 if __name__ == "__main__":
-    client = Client(n_workesr=os.cpu_count() - 2, threads_per_worker=1)
+    client = Client(n_workers=os.cpu_count() - 2, threads_per_worker=1)
 
     data_path = get_data_path()
 
