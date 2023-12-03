@@ -25,12 +25,14 @@ class Detrend:
         self.data_mean: Optional[dask.array.Array] = None
         self.coeffs: Optional[dask.array.Array] = None
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["data_mean"] = state["data_mean"].compute()
+        state["coeffs"] = state["coeffs"].compute()
+        return state
+
     def _get_time(self, time: dask.array.Array) -> dask.array.Array:
-        if time.ndim > 0:
-            time_sentinel = time[0]
-        else:
-            time_sentinel = time.item()
-        if isinstance(time_sentinel, cftime.datetime):
+        if isinstance(time.flat[0], cftime.datetime):
             time = cftime.date2num(
                 time,
                 "days since 1970-01-01",
@@ -50,12 +52,6 @@ class Detrend:
             dask.array.from_array(time_demeaned), state_demeaned
         )
         self.coeffs = coeffs.persist().squeeze()
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["data_mean"] = state["data_mean"].compute()
-        state["coeffs"] = state["coeffs"].compute()
-        return state
 
     def _linear_trend(self, time: NDArray) -> dask.array.Array:
         time = self._get_time(time)
@@ -125,8 +121,8 @@ class PhysicalSpaceForecastSpaceMapper:
     def save(self, directory: Path):
         directory.mkdir(parents=True, exist_ok=True)
         outfile = directory / f"mapper-{get_timestamp()}.pkl"
+        logger.info(f"Saving mapper to {outfile}")
         pickle.dump(self, outfile.open("wb"))
-        logger.info(f"Saved mapper to {outfile}")
 
     @classmethod
     def load(cls, file: Path):
@@ -262,6 +258,9 @@ class PhysicalSpaceForecastSpaceMapper:
     def backward(self, data: dask.array.Array, time: xr.DataArray) -> xr.Dataset:
         logger.info("PhysicalSpaceForecastSpaceMapper.backward()")
 
+        if time.ndim == 0:
+            time = time.expand_dims("time")
+
         data_eof_individual: dict[str, dask.array.Array] = {}
 
         logger.info(f"Splitting direct fields for {', '.join(self.direct_fields)}")
@@ -274,7 +273,6 @@ class PhysicalSpaceForecastSpaceMapper:
         logger.info(f"Back-projecting joint EOF for {', '.join(self.not_direct_fields)}")
         data_eof_joint = data[: self.eof_joint.rank]
         data_stacked_for_joint_eof = self.eof_joint.project_backwards(data_eof_joint)
-        return data_stacked_for_joint_eof
 
         start_row = 0
         for field in self.not_direct_fields:
@@ -293,6 +291,8 @@ class PhysicalSpaceForecastSpaceMapper:
 
             logger.info(f"Back-projecting EOF for {field} [{i+1}/{len(self.fields)}]")
             data_detrended[field] = self.eofs_individual[field].project_backwards(data_field)
+            if data_detrended[field].ndim == 1:
+                data_detrended[field] = data_detrended[field][:, np.newaxis]
 
             data_detrended[field] /= np.sqrt(np.cos(np.radians(self.lats[field])))
 
@@ -321,6 +321,6 @@ class PhysicalSpaceForecastSpaceMapper:
                 .drop_vars("field")
             )
 
-        ds = xr.Dataset(data_xarray)
+        ds = xr.Dataset(data_xarray).transpose(..., "lat", "lon")
 
         return ds

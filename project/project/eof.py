@@ -23,6 +23,13 @@ class EOF:
         self.U: Optional[Union[NDArray, dask.array.Array]] = None
         self.S: Optional[Union[NDArray, dask.array.Array]] = None
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if isinstance(state["U"], dask.array.Array):
+            state["U"] = state["U"].compute()
+            state["S"] = state["S"].compute()
+        return state
+
     def _validate_input_vector(self, data: dask.array.Array):
         assert data.ndim <= 2, "Stack state vector before applying EOF"
         # assert np.logical_not(np.isnan(data).any()), "nan is not allowed in EOF input data"
@@ -48,13 +55,6 @@ class EOF:
             U, S, V = np.linalg.svd(data.compute(), full_matrices=False)
             self.U = U[:, : self.rank].T
             self.S = U[: self.rank]
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        if isinstance(state["U"], dask.array.Array):
-            state["U"] = state["U"].compute()
-            state["S"] = state["S"].compute()
-        return state
 
     def get_component(self, n):
         return self.U[n, :]
