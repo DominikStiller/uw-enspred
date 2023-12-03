@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #PBS -N compute_training_data
 #PBS -A UWAS0131
-#PBS -l select=1:ncpus=8:mpiprocs=1:mem=80GB
+#PBS -l select=1:ncpus=16:mpiprocs=1:mem=300GB
 #PBS -l walltime=24:00:00
 #PBS -q casper
 #PBS -j oe
