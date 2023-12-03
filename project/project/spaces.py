@@ -37,11 +37,11 @@ class Detrend:
             )
         return time
 
-    def fit(self, data: dask.array.Array, time: dask.array.Array):
+    def fit(self, data: dask.array.Array, time: NDArray):
         time = self._get_time(time)
 
         self.time_mean = time.mean()
-        self.data_mean = data.mean(axis=1).persist()[:, np.newaxis]
+        self.data_mean = data.mean(axis=1).compute()[:, np.newaxis]
 
         time_demeaned: dask.array.Array = np.atleast_2d(time - self.time_mean).T
         state_demeaned: dask.array.Array = (data - self.data_mean).T
@@ -49,20 +49,19 @@ class Detrend:
         coeffs, _, _, _ = dask.array.linalg.lstsq(
             dask.array.from_array(time_demeaned), state_demeaned
         )
-        self.coeffs = coeffs.persist().squeeze()
+        self.coeffs = coeffs.compute().squeeze()
 
-    def _linear_trend(self, time: dask.array.Array) -> dask.array.Array:
+    def _linear_trend(self, time: NDArray) -> dask.array.Array:
         time = self._get_time(time)
         time_demeaned = time - self.time_mean
 
         return self.data_mean + self.coeffs[:, np.newaxis] @ time_demeaned[np.newaxis, :]
 
-    def forward(self, data: dask.array.Array, time: dask.array.Array) -> dask.array.Array:
+    def forward(self, data: dask.array.Array, time: NDArray) -> dask.array.Array:
         # De-trend
         return data - self._linear_trend(time)
 
-    def backward(self, data: dask.array.Array, time: dask.array.Array) -> dask.array.Array:
-        print(data.shape)
+    def backward(self, data: dask.array.Array, time: NDArray) -> dask.array.Array:
         # Add trend
         return data + self._linear_trend(time)
 
