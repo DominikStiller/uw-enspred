@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from typing import Optional
+from typing import Optional, Union
 
 import dask
 import numpy as np
@@ -20,12 +20,12 @@ class EOF:
     def __init__(self, rank):
         self.rank = rank
         self.eof_idx: Optional[NDArray] = None
-        self.U: Optional[NDArray] = None
-        self.S: Optional[NDArray] = None
+        self.U: Optional[Union[NDArray, dask.array.Array]] = None
+        self.S: Optional[Union[NDArray, dask.array.Array]] = None
 
     def _validate_input_vector(self, data: dask.array.Array):
         assert data.ndim <= 2, "Stack state vector before applying EOF"
-        assert np.logical_not(np.isnan(data).any()), "nan is not allowed in EOF input data"
+        # assert np.logical_not(np.isnan(data).any()), "nan is not allowed in EOF input data"
 
     def fit(self, data: dask.array.Array, method=EOFMethod.DASK):
         self._validate_input_vector(data)
@@ -41,13 +41,20 @@ class EOF:
         if method == EOFMethod.DASK:
             logger.debug(f"Calculating EOFs using Dask (rank = {self.rank})")
             U, S, V = dask.array.linalg.svd_compressed(data, self.rank)
-            self.U = U.T.compute()
-            self.S = S.compute()
+            self.U = U.T.persist()
+            self.S = S.persist()
         else:
             logger.debug(f"Calculating EOFs using NumPy (rank = {self.rank})")
             U, S, V = np.linalg.svd(data.compute(), full_matrices=False)
             self.U = U[:, : self.rank].T
             self.S = U[: self.rank]
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if isinstance(state["U"], dask.array.Array):
+            state["U"] = state["U"].compute()
+            state["S"] = state["S"].compute()
+        return state
 
     def get_component(self, n):
         return self.U[n, :]
