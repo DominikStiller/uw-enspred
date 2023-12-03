@@ -186,7 +186,7 @@ class IntakeESMLoader:
         return dataarrays
 
 
-def save_mfdataset(ds: xr.Dataset, directory: Path):
+def save_mfdataset(ds: xr.Dataset, directory: Path, compute=True):
     directory /= get_timestamp()
     directory.mkdir(parents=True)
 
@@ -196,14 +196,19 @@ def save_mfdataset(ds: xr.Dataset, directory: Path):
     indexes, datasets = zip(*ds.groupby("century"))
     paths = [directory / f"{i}.nc" for i in indexes]
 
-    logger.info(f"Saving dataset")
-    xr.save_mfdataset(datasets, paths)
-    logger.info(f"Saved dataset to {directory}")
+    logger.info(f"Saving dataset to {directory}")
+    if compute:
+        xr.save_mfdataset(datasets, paths)
+    else:
+        return xr.save_mfdataset(datasets, paths, compute=False)
 
 
-def save_dataset(ds: xr.Dataset, directory: Path):
+def save_dataset(ds: xr.Dataset, directory: Path, compute=True):
     directory /= get_timestamp()
     directory.mkdir(parents=True)
 
-    ds.to_netcdf(directory / "data.nc")
-    logger.info(f"Saved dataset to {directory}")
+    logger.info(f"Saving dataset to {directory}")
+    if compute:
+        ds.to_netcdf(directory / "data.nc")
+    else:
+        return ds.to_netcdf(directory / "data.nc", compute=False)
