@@ -90,6 +90,7 @@ class PhysicalSpaceForecastSpaceMapper:
         self,
         k,
         l,
+        k_direct=None,
         direct_fields: list[str] = None,
         standardized_initially_fields: list[str] = None,
     ):
@@ -98,6 +99,7 @@ class PhysicalSpaceForecastSpaceMapper:
         Args:
             k: EOFs to retain in first step
             l: EOFs to retain in second step
+            k_direct: EOFs to retain in first step for direct fields
             direct_fields: fields to directly append to state after step 1 instead of including them in step 2
                 PH20 does this for OHC700m
             standardized_first_fields: fields to standardize before step 1
@@ -105,6 +107,7 @@ class PhysicalSpaceForecastSpaceMapper:
         """
         self.k = k
         self.l = l
+        self.k_direct = k_direct or k
         self.direct_fields = direct_fields
         self.standardized_initially_fields = standardized_initially_fields or []
 
@@ -179,7 +182,9 @@ class PhysicalSpaceForecastSpaceMapper:
             data_field = data_detrended[field]
             data_field *= np.sqrt(np.cos(np.radians(self.lats[field])))
 
-            self.eofs_individual[field] = EOF(self.k)
+            self.eofs_individual[field] = EOF(
+                self.k_direct if field in self.direct_fields else self.k
+            )
 
             logger.info(f"Fitting EOF for {field} [{i+1}/{len(self.fields)}]")
             self.eofs_individual[field].fit(data_field)

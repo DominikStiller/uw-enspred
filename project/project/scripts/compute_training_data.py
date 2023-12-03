@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import xarray as xr
 from distributed import Client, progress
@@ -10,7 +12,7 @@ from project.util import get_data_path
 logger = get_logger(__name__)
 
 if __name__ == "__main__":
-    client = Client(threads_per_worker=1)
+    client = Client(n_workesr=os.cpu_count() - 2, threads_per_worker=1)
 
     data_path = get_data_path()
 
@@ -33,7 +35,7 @@ if __name__ == "__main__":
     ds = loader.load_dataset()
     # ds = loader.load_dataset(["702101-704012"]).isel(time=slice(None, 20))
 
-    mapper = PhysicalSpaceForecastSpaceMapper(400, 30, ["ohc700"], ["pr"])
+    mapper = PhysicalSpaceForecastSpaceMapper(400, 30, 20, ["ohc700"], ["pr"])
     array_eof = mapper.fit_and_forward(ds)
     ds_eof = xr.DataArray(array_eof, coords=dict(state=np.arange(array_eof.shape[0]), time=ds.time))
     mapper.save(data_path / "mapper")
