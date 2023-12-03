@@ -25,7 +25,7 @@ class EOF:
 
     def _validate_input_vector(self, data: dask.array.Array):
         assert data.ndim <= 2, "Stack state vector before applying EOF"
-        assert not np.isnan(data).any(), "nan is not allowed in EOF input data"
+        assert np.logical_not(np.isnan(data).any()), "nan is not allowed in EOF input data"
 
     def fit(self, data: dask.array.Array, method=EOFMethod.DASK):
         self._validate_input_vector(data)
@@ -41,8 +41,8 @@ class EOF:
         if method == EOFMethod.DASK:
             logger.debug(f"Calculating EOFs using Dask (rank = {self.rank})")
             U, S, V = dask.array.linalg.svd_compressed(data, self.rank)
-            self.U = U.T.persist()
-            self.S = S.persist()
+            self.U = U.T.compute()
+            self.S = S.compute()
         else:
             logger.debug(f"Calculating EOFs using NumPy (rank = {self.rank})")
             U, S, V = np.linalg.svd(data.compute(), full_matrices=False)

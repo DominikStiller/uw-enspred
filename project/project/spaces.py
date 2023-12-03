@@ -41,7 +41,7 @@ class Detrend:
         time = self._get_time(time)
 
         self.time_mean = time.mean()
-        self.data_mean = data.mean(axis=1).persist()[:, np.newaxis]
+        self.data_mean = data.mean(axis=1).compute()[:, np.newaxis]
 
         time_demeaned: dask.array.Array = np.atleast_2d(time - self.time_mean).T
         state_demeaned: dask.array.Array = (data - self.data_mean).T
@@ -49,7 +49,7 @@ class Detrend:
         coeffs, _, _, _ = dask.array.linalg.lstsq(
             dask.array.from_array(time_demeaned), state_demeaned
         )
-        self.coeffs = coeffs.persist().squeeze()
+        self.coeffs = coeffs.compute().squeeze()
 
     def _linear_trend(self, time: dask.array.Array) -> dask.array.Array:
         time = self._get_time(time)
@@ -269,6 +269,7 @@ class PhysicalSpaceForecastSpaceMapper:
         logger.info(f"Back-projecting joint EOF for {', '.join(self.not_direct_fields)}")
         data_eof_joint = data[: self.eof_joint.rank]
         data_stacked_for_joint_eof = self.eof_joint.project_backwards(data_eof_joint)
+        return data_stacked_for_joint_eof
 
         start_row = 0
         for field in self.not_direct_fields:
