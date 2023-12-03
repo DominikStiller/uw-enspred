@@ -174,13 +174,13 @@ class PhysicalSpaceForecastSpaceMapper:
 
         data_eof_individual: dict[str, dask.array.Array] = {}
 
-        for field in self.fields:
+        for i, field in enumerate(self.fields):
             data_field = data_detrended[field]
             data_field *= np.sqrt(np.cos(np.radians(self.lats[field])))
 
             self.eofs_individual[field] = EOF(self.k)
 
-            logger.info(f"Fitting EOF for {field}")
+            logger.info(f"Fitting EOF for {field} [{i+1}/{len(self.fields)}]")
             self.eofs_individual[field].fit(data_field)
             logger.info(f"Projecting EOF for {field}")
             data_eof_individual[field] = self.eofs_individual[field].project_forwards(data_field)
@@ -231,11 +231,11 @@ class PhysicalSpaceForecastSpaceMapper:
 
         data_eof_individual: dict[str, dask.array.Array] = {}
 
-        for field in self.fields:
+        for i, field in enumerate(self.fields):
             data_field = data_detrended[field]
             data_field *= np.sqrt(np.cos(np.radians(self.lats[field])))
 
-            logger.info(f"Projecting EOF for {field}")
+            logger.info(f"Projecting EOF for {field} [{i+1}/{len(self.fields)}]")
             data_eof_individual[field] = self.eofs_individual[field].project_forwards(data_field)
 
             if field not in self.standardized_initially_fields:
@@ -278,14 +278,14 @@ class PhysicalSpaceForecastSpaceMapper:
 
         data_detrended: dict[str, dask.array.Array] = {}
 
-        for field in self.fields:
+        for i, field in enumerate(self.fields):
             data_field = data_eof_individual[field]
 
             if field not in self.standardized_initially_fields:
                 logger.info(f"De-standardizing {field} after individual EOF")
                 data_field *= self.standard_deviations[field]
 
-            logger.info(f"Back-projecting EOF for {field}")
+            logger.info(f"Back-projecting EOF for {field} [{i+1}/{len(self.fields)}]")
             data_detrended[field] = self.eofs_individual[field].project_backwards(data_field)
 
             data_detrended[field] /= np.sqrt(np.cos(np.radians(self.lats[field])))
