@@ -1,6 +1,7 @@
 import numpy as np
 import xarray as xr
 from dask.diagnostics import ProgressBar
+from distributed import Client
 
 from project.io import IntakeESMLoader, save_mfdataset
 from project.logger import get_logger
@@ -10,7 +11,7 @@ from project.util import get_data_path
 logger = get_logger(__name__)
 
 if __name__ == "__main__":
-    # client = Client(threads_per_worker=1)
+    client = Client(threads_per_worker=1)
 
     data_path = get_data_path()
 
