@@ -1,10 +1,13 @@
 import platform
 from datetime import datetime
+from enum import Enum, auto
 from pathlib import Path
 from typing import Union
 
+import cftime
 import numpy as np
 import xarray as xr
+from numpy.typing import NDArray
 from xarray import Dataset, DataArray
 
 
@@ -84,3 +87,43 @@ def get_data_path() -> Path:
         return Path("/glade/work/dstiller/enspred/project")
     else:
         raise ValueError("Unknown host")
+
+
+class TimeConverter:
+    """Class to map rich datetime objects to a simple number and back"""
+
+    class TimeConversionType(Enum):
+        RAW = auto()
+        CFTIME_DAYS_SINCE = auto()
+
+    def __init__(self):
+        self.type = None
+        self.calendar = None
+
+    def fit(self, time: NDArray):
+        if isinstance(time.flat[0], cftime.datetime):
+            self.type = TimeConverter.TimeConversionType.CFTIME_DAYS_SINCE
+            self.calendar = time.flat[0].calendar
+        else:
+            self.type = TimeConverter.TimeConversionType.RAW
+
+    def forwards(self, time: NDArray) -> NDArray:
+        if self.type == TimeConverter.TimeConversionType.RAW:
+            return time
+        else:
+            return cftime.date2num(
+                time,
+                "days since 1970-01-01",
+            )
+
+    def backwards(self, time: NDArray) -> NDArray:
+        if self.type == TimeConverter.TimeConversionType.RAW:
+            return time
+        else:
+            return cftime.num2date(time, "days since 1970-01-01", calendar=self.calendar)
+
+
+def convert_time(time: NDArray) -> NDArray:
+    converter = TimeConverter()
+    converter.fit(time)
+    return converter.forwards(time)

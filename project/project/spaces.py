@@ -2,8 +2,7 @@ import pickle
 from pathlib import Path
 from typing import Optional
 
-import cftime
-import dask
+import dask.array
 import numpy as np
 import xarray as xr
 from numpy.typing import NDArray
@@ -14,6 +13,7 @@ from project.util import (
     stack_state,
     get_timestamp,
     list_complement,
+    convert_time,
 )
 
 logger = get_logger(__name__)
@@ -31,16 +31,8 @@ class Detrend:
         state["coeffs"] = state["coeffs"].compute()
         return state
 
-    def _get_time(self, time: dask.array.Array) -> dask.array.Array:
-        if isinstance(time.flat[0], cftime.datetime):
-            time = cftime.date2num(
-                time,
-                "days since 1970-01-01",
-            )
-        return time
-
     def fit(self, data: dask.array.Array, time: NDArray):
-        time = self._get_time(time)
+        time = convert_time(time)
 
         self.time_mean = time.mean()
         self.data_mean = data.mean(axis=1).persist()[:, np.newaxis]
@@ -54,7 +46,7 @@ class Detrend:
         self.coeffs = coeffs.persist().squeeze()
 
     def _linear_trend(self, time: NDArray) -> dask.array.Array:
-        time = self._get_time(time)
+        time = convert_time(time)
         time_demeaned = time - self.time_mean
 
         return self.data_mean + self.coeffs[:, np.newaxis] @ time_demeaned[np.newaxis, :]

@@ -1,7 +1,7 @@
 from enum import Enum, auto
 from typing import Optional, Union
 
-import dask
+import dask.array
 import numpy as np
 import xarray as xr
 from numpy.typing import NDArray
