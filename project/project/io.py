@@ -4,6 +4,7 @@ import warnings
 from pathlib import Path
 from typing import Optional, Callable
 
+import cftime
 import intake
 import xarray as xr
 from xarray import SerializationWarning
@@ -195,7 +196,10 @@ def save_mfdataset(ds: xr.Dataset, directory: Path, compute=True):
     directory /= get_timestamp()
     directory.mkdir(parents=True)
 
-    year = ds["time"].dt.year
+    if isinstance(ds["time"].values.flat[0], cftime.datetime):
+        year = ds["time"].dt.year
+    else:
+        year = ds["time"]
     ds["century"] = ((year - year[0]) / 100).astype(int)
 
     indexes, datasets = zip(*ds.groupby("century"))
