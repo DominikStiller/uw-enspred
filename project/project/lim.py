@@ -7,6 +7,7 @@ import numpy as np
 import scipy
 import xarray as xr
 from numpy.typing import NDArray
+from tqdm import tqdm
 from xarray import Dataset, DataArray
 
 from project.logger import get_logger
@@ -63,7 +64,8 @@ class LIM:
         C_tau0 /= data.shape[1] - 1
 
         self.G_tau0 = C_tau0 @ np.linalg.inv(C_t0)
-        self.L = scipy.linalg.logm(self.G_tau0) / self.tau0
+        # Take real part because logm introduces spurious imaginary parts
+        self.L = np.real(scipy.linalg.logm(self.G_tau0) / self.tau0)
 
     def print_properties(self):
         print("G1:", self.G_tau0)
@@ -83,7 +85,7 @@ class LIM:
         time = self.time_converter.forwards(t0) + np.arange(0, (n_steps + 1) * self.tau0, self.tau0)
         forecast_np[:, 0] = initial_np
 
-        for i in range(n_steps - 1):
+        for i in tqdm(range(n_steps)):
             forecast_np[:, i + 1] = np.linalg.matrix_power(self.G_tau0, i + 1) @ initial_np
 
         forecast_np += self.mean

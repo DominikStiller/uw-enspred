@@ -16,3 +16,4 @@ dependencies:
   - dask
   - regionmask
   - scikit-learn
+  - tqdm

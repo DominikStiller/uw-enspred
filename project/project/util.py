@@ -127,3 +127,18 @@ def convert_time(time: NDArray) -> NDArray:
     converter = TimeConverter()
     converter.fit(time)
     return converter.forwards(time)
+
+
+def month_name(time: DataArray):
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return [months[n - 1] for n in time.dt.month.values]
+
+
+def average_annually(ds: Dataset) -> Dataset:
+    # Average April-March and remove partial years
+    return (
+        ds.groupby(ds.time.dt.year - (ds.time.dt.month < 4))
+        .mean()
+        .rename(group="time")
+        .isel(time=slice(1, -1))
+    )
