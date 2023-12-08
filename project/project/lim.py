@@ -74,28 +74,34 @@ class LIM:
         print("Eigenvalues of L:", np.linalg.eigvals(self.L))
 
     def forecast(self, initial: Union[Dataset, DataArray], n_steps, t0):
+        unstack = False
         if isinstance(initial, Dataset):
             initial = stack_state(initial)
+            unstack = True
+
         assert np.array_equal(
             self.state_coords.data, initial.state.data
         ), "Initial state must match training data."
         initial_np = np.squeeze(initial.values)
 
-        forecast_np = dask.array.zeros((self.Nx, n_steps + 1))
+        forecast_np = np.zeros((self.Nx, n_steps + 1))
         time = self.time_converter.forwards(t0) + np.arange(0, (n_steps + 1) * self.tau0, self.tau0)
         forecast_np[:, 0] = initial_np
 
+        G = self.G_tau0
+
         for i in tqdm(range(n_steps)):
-            forecast_np[:, i + 1] = np.linalg.matrix_power(self.G_tau0, i + 1) @ initial_np
+            forecast_np[:, i + 1] = G @ initial_np
+            G = self.G_tau0 @ G
 
         forecast_np += self.mean
 
         forecast = xr.DataArray(
-            forecast_np,
+            dask.array.from_array(forecast_np),
             dims=["state", "time"],
             coords={"state": self.state_coords, "time": self.time_converter.backwards(time)},
         )
-        if isinstance(initial, Dataset):
+        if unstack:
             forecast = unstack_state(forecast)
 
         return forecast
