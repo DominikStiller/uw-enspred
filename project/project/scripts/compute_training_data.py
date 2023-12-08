@@ -31,9 +31,10 @@ if __name__ == "__main__":
             "ohc700",
         ],
     )
-    ds = loader.load_dataset()
-    # ds = loader.load_dataset(["702101-704012"]).isel(time=slice(None, 20))
+    # ds = loader.load_dataset()
+    ds = loader.load_dataset(["702101-704012"]).isel(time=slice(None, 20))
 
+    logger.info("Averaging annually")
     ds = average_annually(ds)
 
     mapper = PhysicalSpaceForecastSpaceMapper(400, 30, 20, ["ohc700"], ["pr"])
