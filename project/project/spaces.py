@@ -252,7 +252,7 @@ class PhysicalSpaceForecastSpaceMapper:
         )
         return data_eof_joint_and_direct
 
-    def backward(self, data: dask.array.Array, time: xr.DataArray) -> xr.Dataset:
+    def backward(self, data: dask.array.Array, time: xr.DataArray, retrend=True) -> xr.Dataset:
         logger.info("PhysicalSpaceForecastSpaceMapper.backward()")
 
         if time.ndim == 0:
@@ -293,13 +293,16 @@ class PhysicalSpaceForecastSpaceMapper:
 
             data_detrended[field] /= np.sqrt(np.cos(np.radians(self.lats[field])))
 
-        logger.info("Re-trending data")
-        data_nonan: dict[str, dask.array.Array] = {}
-        for field in self.fields:
-            if field in self.standardized_initially_fields:
-                logger.info(f"De-standardizing {field} before individual EOF")
-                data_detrended[field] *= self.standard_deviations[field]
-            data_nonan[field] = self.detrends[field].backward(data_detrended[field], time.data)
+        if retrend:
+            logger.info("Re-trending data")
+            data_nonan: dict[str, dask.array.Array] = {}
+            for field in self.fields:
+                if field in self.standardized_initially_fields:
+                    logger.info(f"De-standardizing {field} before individual EOF")
+                    data_detrended[field] *= self.standard_deviations[field]
+                data_nonan[field] = self.detrends[field].backward(data_detrended[field], time.data)
+        else:
+            data_nonan = data_detrended
 
         logger.info("Un-masking nans")
         data_raw: dict[str, dask.array.Array] = {}
