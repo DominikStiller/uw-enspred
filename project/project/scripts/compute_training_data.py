@@ -1,7 +1,7 @@
 import dask
 import numpy as np
 import xarray as xr
-from dask.distributed import progress, Client
+from dask.distributed import Client
 
 from project.io import IntakeESMLoader, save_mfdataset
 from project.logger import get_logger
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     # ds = loader.load_dataset(["702101-704012"]).isel(time=slice(None, 20))
 
     logger.info("Averaging annually")
-    ds = average_annually(ds).chunk(chunks=dict(time=100)).persist()
+    ds = average_annually(ds).chunk(chunks=dict(time=100))
 
     mapper = PhysicalSpaceForecastSpaceMapper(400, 30, 20, ["ohc700"], ["pr"])
     array_eof = mapper.fit_and_forward(ds)
@@ -43,9 +43,5 @@ if __name__ == "__main__":
     mapper.save(data_path / "mapper")
     # with ProgressBar():
     #     save_mfdataset(ds_eof.to_dataset(name="data"), data_path / "training_data")
-    task = save_mfdataset(
-        ds_eof.to_dataset(name="data"), data_path / "training_data", compute=False
-    )
-    progress(task)
-    task.compute()
+    save_mfdataset(ds_eof.to_dataset(name="data"), data_path / "training_data")
     logger.info("Computing of training data completed")
