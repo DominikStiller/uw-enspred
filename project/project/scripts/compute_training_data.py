@@ -36,7 +36,7 @@ if __name__ == "__main__":
     # ds = loader.load_dataset(["702101-704012"]).isel(time=slice(None, 20))
 
     logger.info("Averaging annually")
-    ds = average_annually(ds)
+    ds = average_annually(ds).chunk(chunks=dict(time=100)).persist()
 
     mapper = PhysicalSpaceForecastSpaceMapper(400, 30, 20, ["ohc700"], ["pr"])
     array_eof = mapper.fit_and_forward(ds)
