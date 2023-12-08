@@ -20,9 +20,9 @@ class LIM:
     def __init__(self):
         self.tau0 = None
         self.G_tau0: NDArray = None
-        self.C_t0: NDArray = None
+        self.C_tau0: NDArray = None
         self.L: NDArray = None
-        self.mean = None
+        self.mean: NDArray = None
         self.state_coords = None
         self.Nx = None  # state length
         self.time_converter = TimeConverter()
@@ -42,9 +42,8 @@ class LIM:
         time = self.time_converter.forwards(data.time.data)
         taus = np.diff(time)
         self.tau0 = taus.mean()
-        # Must have uniform dt (within 5% of each other)
-        # They may not be exactly uniform if samples are monthly since months do not have uniform length
-        assert all(taus / self.tau0 - 1 <= 0.05), "Sample times must be approximately uniform"
+        # Must have uniform dt
+        assert all(np.isclose(taus, self.tau0)), "Sample times must be uniform"
 
         if isinstance(data, Dataset):
             data = stack_state(data)
@@ -52,7 +51,7 @@ class LIM:
         data = data.data  # extract Dask array
         self.Nx = len(self.state_coords)
 
-        self.mean = data.mean(axis=1)[:, np.newaxis]
+        self.mean = data.mean(axis=1)[:, np.newaxis].compute()
         data -= self.mean
 
         data_t0 = data[:, :-1]
@@ -63,7 +62,7 @@ class LIM:
         C_t0 /= data.shape[1] - 1
         C_tau0 /= data.shape[1] - 1
 
-        self.G_tau0 = C_tau0 @ np.linalg.inv(C_t0)
+        self.G_tau0 = (C_tau0 @ np.linalg.inv(C_t0)).compute()
         # Take real part because logm introduces spurious imaginary parts
         self.L = np.real(scipy.linalg.logm(self.G_tau0) / self.tau0)
 
@@ -94,10 +93,10 @@ class LIM:
             forecast_np[:, i + 1] = G @ initial_np
             G = self.G_tau0 @ G
 
-        forecast_np += self.mean
+        # forecast_np += self.mean
 
         forecast = xr.DataArray(
-            dask.array.from_array(forecast_np),
+            self.mean + dask.array.from_array(forecast_np),
             dims=["state", "time"],
             coords={"state": self.state_coords, "time": self.time_converter.backwards(time)},
         )
