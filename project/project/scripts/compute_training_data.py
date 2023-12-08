@@ -1,7 +1,6 @@
-import dask.system
 import numpy as np
 import xarray as xr
-from dask.distributed import Client, progress
+from dask.diagnostics import ProgressBar
 
 from project.io import IntakeESMLoader, save_mfdataset
 from project.logger import get_logger
@@ -11,7 +10,7 @@ from project.util import get_data_path, average_annually
 logger = get_logger(__name__)
 
 if __name__ == "__main__":
-    client = Client(n_workers=dask.system.CPU_COUNT - 2, threads_per_worker=1)
+    # client = Client(n_workers=dask.system.CPU_COUNT - 2, threads_per_worker=1)
 
     data_path = get_data_path()
 
@@ -41,11 +40,11 @@ if __name__ == "__main__":
     array_eof = mapper.fit_and_forward(ds)
     ds_eof = xr.DataArray(array_eof, coords=dict(state=np.arange(array_eof.shape[0]), time=ds.time))
     mapper.save(data_path / "mapper")
-    # with ProgressBar():
-    #     save_mfdataset(ds_eof.to_dataset(name="data"), data_path / "training_data")
-    task = save_mfdataset(
-        ds_eof.to_dataset(name="data"), data_path / "training_data", compute=False
-    )
-    progress(task)
-    task.compute()
+    with ProgressBar():
+        save_mfdataset(ds_eof.to_dataset(name="data"), data_path / "training_data")
+    # task = save_mfdataset(
+    #     ds_eof.to_dataset(name="data"), data_path / "training_data", compute=False
+    # )
+    # progress(task)
+    # task.compute()
     logger.info("Computing of training data completed")
