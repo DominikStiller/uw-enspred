@@ -1,9 +1,8 @@
-from multiprocessing.connection import Client
 
 import dask
 import numpy as np
 import xarray as xr
-from dask.distributed import progress
+from dask.distributed import progress, Client
 
 from project.io import IntakeESMLoader, save_mfdataset
 from project.logger import get_logger
