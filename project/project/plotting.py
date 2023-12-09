@@ -5,6 +5,7 @@ from typing import Union
 import cartopy.crs as ccrs
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sb
 from cartopy.util import add_cyclic_point
 
@@ -156,17 +157,23 @@ def plot_field(
     highlight_contour=None,
     rotate_cbar_ticks=False,
     n_level=50,
+    same_limits=False,
     **kwargs,
 ):
-    if not isinstance(axs, list):
+    if not (isinstance(axs, list) or isinstance(axs, np.ndarray)):
         axs = [axs]
-    if not isinstance(das, list):
+    if not (isinstance(axs, list) or isinstance(axs, np.ndarray)):
         das = [das]
 
     das = [da.load() for da in das]
 
     vmin = vmin or min([da.min() for da in das])
     vmax = vmax or max([da.max() for da in das])
+
+    if same_limits:
+        max_v = max(abs(vmin), abs(vmax))
+        vmax = max_v
+        vmin = -max_v
 
     for ax, da in zip(axs, das):
         lat = da.lat

@@ -22,11 +22,11 @@ from xarray import Dataset, DataArray
 #     return da.unstack("state").to_dataset("field")
 
 
-def stack_state(ds: Union[Dataset, DataArray]) -> DataArray:
+def stack_state(ds: Union[Dataset, DataArray], sample_dim="time") -> DataArray:
     if isinstance(ds, DataArray):
         ds = ds.to_dataset()
     return ds.to_stacked_array(
-        "state", sample_dims=["time"], variable_dim="field", name=""
+        "state", sample_dims=[sample_dim], variable_dim="field", name=""
     ).transpose()
 
 
@@ -108,7 +108,7 @@ class TimeConverter:
             self.type = TimeConverter.TimeConversionType.RAW
 
     def forwards(self, time: NDArray) -> NDArray:
-        if self.type == TimeConverter.TimeConversionType.RAW:
+        if self.type.name == TimeConverter.TimeConversionType.RAW.name:
             return time
         else:
             return cftime.date2num(
@@ -117,7 +117,7 @@ class TimeConverter:
             )
 
     def backwards(self, time: NDArray) -> NDArray:
-        if self.type == TimeConverter.TimeConversionType.RAW:
+        if self.type.name == TimeConverter.TimeConversionType.RAW.name:
             return time
         else:
             return cftime.num2date(time, "days since 1970-01-01", calendar=self.calendar)
