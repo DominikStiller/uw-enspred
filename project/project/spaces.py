@@ -204,6 +204,22 @@ class PhysicalSpaceForecastSpaceMapper:
             )
             return data_eof_joint_and_direct
 
+    def forward_ensemble(self, data: xr.Dataset) -> xr.DataArray:
+        # Require dims (ens, state, time)
+        Ne = len(data.ens)
+        return xr.concat(
+            [
+                # TODO change state length to be flexible
+                xr.DataArray(
+                    self.forward(data.sel(ens=i)), coords=dict(state=range(50), time=data.time)
+                )
+                .expand_dims("ens")
+                .assign_coords(ens=[i])
+                for i in range(Ne)
+            ],
+            "ens",
+        )
+
     def forward(self, ds: xr.Dataset) -> dask.array.Array:
         logger.info("PhysicalSpaceForecastSpaceMapper.forward()")
 
@@ -334,6 +350,6 @@ class PhysicalSpaceForecastSpaceMapper:
                 .drop_vars("field")
             )
 
-        ds = xr.Dataset(data_xarray).transpose(..., "lat", "lon")
+        ds = xr.Dataset(data_xarray).transpose(..., "lon", "lat")
 
         return ds

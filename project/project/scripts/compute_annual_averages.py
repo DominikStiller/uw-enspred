@@ -33,6 +33,7 @@ if __name__ == "__main__":
 
     logger.info("Averaging annually")
     ds = average_annually(ds).chunk(chunks=dict(time=100))
+    ds = ds.assign_coords(time=range(1, len(ds.time) + 1))
 
     save_mfdataset(ds, data_path / "annual_averages")
     logger.info("Computing of annual averages completed")

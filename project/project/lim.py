@@ -176,9 +176,12 @@ class LIM:
         """
         unstack = False
         if isinstance(initial, Dataset):
+            print(initial)
             initial = stack_state(initial)
             unstack = True
 
+        if "ens" in initial.dims:
+            assert n_ensemble == len(initial.ens)
         assert np.array_equal(
             self.state_coords.data, initial.state.data
         ), "Initial state dimension must match training data state dimension."

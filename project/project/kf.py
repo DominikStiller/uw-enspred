@@ -5,25 +5,42 @@ from numpy.linalg import inv
 from project.util import stack_state, unstack_state
 
 
-class SerialEnSRF:
-    def assimilate(self, prior, obs, sigma_obs):
-        prior = stack_state(prior, sample_dim="ens")
-        assert prior.dims == ("state", "ens")
-        state_coords = prior.state
-        ens_coords = prior.ens
+def create_initial_ensemble(initial, n_ens, std=0.001):
+    initial = stack_state(initial, sample_dim=None)
 
-        prior = prior.data.compute()
+    rng = np.random.default_rng(562151)
+
+    ens = []
+    for i in range(n_ens):
+        member = initial * rng.normal(1, std, size=initial.shape)
+        member = member.expand_dims("ens").assign_coords(ens=[i])
+        ens.append(member)
+
+    ens = xr.concat(ens, "ens").transpose("ens", ...)
+    ens = unstack_state(ens)
+
+    return ens
+
+
+class SerialEnSRF:
+    def assimilate(self, prior_ds, obs, sigma_obs):
+        prior_ds = stack_state(prior_ds, sample_dim="ens")
+        state_coords = prior_ds.state
+        ens_coords = prior_ds.ens
+
+        prior = prior_ds.data
 
         # TODO allow multiple obs at the same location and different fields than tas
         for i in range(len(obs.location)):
             obs_i = obs.isel(location=i)["tas"]
             obs_state_idx = state_coords.indexes["state"].get_loc(("tas",) + obs_i.location.item())
-            print(obs_state_idx)
             prior = self._assimilate_single(prior, obs_i.values, obs_state_idx, sigma_obs)
 
         posterior = xr.DataArray(prior, coords=dict(state=state_coords, ens=ens_coords))
+        if "time" in prior_ds.coords:
+            posterior = posterior.expand_dims("time").assign_coords(time=[prior_ds.time])
 
-        return unstack_state(posterior)
+        return posterior.unstack().to_dataset("field")
 
     def _assimilate_single(self, prior, obs, obs_state_idx, sigma_obs):
         Nx, Ne = prior.shape
