@@ -36,6 +36,8 @@ if __name__ == "__main__":
 
     logger.info("Averaging annually")
     ds = average_annually(ds).chunk(chunks=dict(time=100))
+    # Start from 1 CE (for past2k experiment)
+    ds = ds.assign_coords(time=range(1, len(ds.time) + 1))
 
     mapper = PhysicalSpaceForecastSpaceMapper(400, 30, 20, ["ohc700"], ["pr"])
     array_eof = mapper.fit_and_forward(ds)

@@ -200,10 +200,9 @@ def save_mfdataset(ds: xr.Dataset, directory: Path, compute=True):
         year = ds["time"].dt.year
     else:
         year = ds["time"]
-    ds["century"] = ((year - year[0]) / 100).astype(int)
-    # TODO evaluate century directly in groupby
+    century = ((year - year[0]) / 100).astype(int)
 
-    indexes, datasets = zip(*ds.groupby("century"))
+    indexes, datasets = zip(*ds.groupby(century))
     paths = [directory / f"{i}.nc" for i in indexes]
 
     logger.info(f"Saving dataset to {directory}")
