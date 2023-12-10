@@ -12,9 +12,7 @@ class TestDetrend(unittest.TestCase):
         x = np.arange(0, 10)[np.newaxis, :]
         coeffs = np.arange(1, 5)[:, np.newaxis]
         y = coeffs @ x
-        da = xr.DataArray(
-            y, coords=dict(state=np.arange(coeffs.shape[0]), time=x.squeeze())
-        )
+        da = xr.DataArray(y, coords=dict(state=np.arange(coeffs.shape[0]), time=x.squeeze()))
         # Convert to chunked DataArray
         da = da.to_dataset(name="var").chunk(chunks=dict(time=2))["var"]
 
@@ -27,9 +25,7 @@ class TestDetrend(unittest.TestCase):
 
     def test_random(self):
         x = np.random.randn(10, 100)
-        da = xr.DataArray(
-            x, coords=dict(state=np.arange(x.shape[0]), time=np.arange(x.shape[1]))
-        )
+        da = xr.DataArray(x, coords=dict(state=np.arange(x.shape[0]), time=np.arange(x.shape[1])))
         # Convert to chunked DataArray
         da = da.to_dataset(name="var").chunk(chunks=dict(time=2))["var"]
 

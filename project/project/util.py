@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Union
 
 import cftime
+import dask.array
 import numpy as np
 import xarray as xr
 from numpy.typing import NDArray
@@ -45,8 +46,15 @@ def matrix_power(da: DataArray, n: int):
     return DataArray(np.linalg.matrix_power(np.atleast_2d(da.values), n), coords=da.coords)
 
 
-def is_dask_array(arr):
-    return hasattr(arr.data, "dask")
+def is_dask_array(arr: Union[DataArray, dask.array.Array, NDArray]):
+    if isinstance(arr, DataArray):
+        return hasattr(arr.data, "dask")
+    elif isinstance(arr, dask.array.Array):
+        return True
+    elif isinstance(arr, np.ndarray):
+        return False
+    else:
+        return False
 
 
 def field_complement(ds: Union[xr.DataArray, xr.Dataset], other_fields: list[str]) -> list[str]:
@@ -108,6 +116,7 @@ class TimeConverter:
             self.type = TimeConverter.TimeConversionType.RAW
 
     def forwards(self, time: NDArray) -> NDArray:
+        # Use .name instead of identity to support ipython autoreload
         if self.type.name == TimeConverter.TimeConversionType.RAW.name:
             return time
         else:
