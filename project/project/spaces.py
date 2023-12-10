@@ -252,6 +252,19 @@ class PhysicalSpaceForecastSpaceMapper:
         )
         return data_eof_joint_and_direct
 
+    def backward_ensemble(self, data: xr.DataArray, retrend=True) -> xr.Dataset:
+        # Require dims (ens, state, time)
+        assert data.ndim == 3
+        Ne = len(data.ens)
+        return xr.combine_by_coords(
+            [
+                self.backward(data.sel(ens=i).data, data.time, retrend)
+                .expand_dims("ens")
+                .assign_coords(ens=[i])
+                for i in range(Ne)
+            ]
+        )
+
     def backward(self, data: dask.array.Array, time: xr.DataArray, retrend=True) -> xr.Dataset:
         logger.info("PhysicalSpaceForecastSpaceMapper.backward()")
 

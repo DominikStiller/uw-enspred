@@ -2,6 +2,7 @@ name: enspred
 channels:
   - conda-forge
 dependencies:
+  - pip
   - python=3.11
   - numpy
   - xarray
@@ -17,3 +18,5 @@ dependencies:
   - regionmask
   - scikit-learn
   - tqdm
+  - pip:
+    - git+https://github.com/LinkedEarth/pylipd.git@main

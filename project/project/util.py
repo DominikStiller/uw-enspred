@@ -26,9 +26,12 @@ from xarray import Dataset, DataArray
 def stack_state(ds: Union[Dataset, DataArray], sample_dim="time") -> DataArray:
     if isinstance(ds, DataArray):
         ds = ds.to_dataset()
-    return ds.to_stacked_array(
-        "state", sample_dims=[sample_dim], variable_dim="field", name=""
-    ).transpose()
+    if sample_dim is not None:
+        return ds.to_stacked_array(
+            "state", sample_dims=[sample_dim], variable_dim="field", name=""
+        ).transpose()
+    else:
+        return ds.to_stacked_array("state", [])
 
 
 def unstack_state(da: DataArray) -> Dataset:
