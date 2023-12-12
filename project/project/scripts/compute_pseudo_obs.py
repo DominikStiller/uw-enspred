@@ -11,6 +11,8 @@ from project.util import get_data_path, average_annually
 logger = get_logger(__name__)
 
 if __name__ == "__main__":
+    sigma_obs = 1
+
     client = Client(n_workers=dask.system.CPU_COUNT // 2, threads_per_worker=1)
 
     data_path = get_data_path()
@@ -46,6 +48,7 @@ if __name__ == "__main__":
             for i in range(len(locs.index))
         ]
     )
+    obs["tas"] += np.random.default_rng(52565641).normal(0, sigma_obs, obs["tas"].shape)
 
     save_mfdataset(obs.reset_index("location"), data_path / "obs")
     logger.info("Computing of pseudo-observations completed")

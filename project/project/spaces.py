@@ -207,6 +207,8 @@ class PhysicalSpaceForecastSpaceMapper:
     def forward_ensemble(self, data: xr.Dataset) -> xr.DataArray:
         # Require dims (ens, state, time)
         Ne = len(data.ens)
+        # TODO parallelize, same for backwards
+        # TODO add tqdm
         return xr.concat(
             [
                 # TODO change state length to be flexible

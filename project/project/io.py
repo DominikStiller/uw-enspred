@@ -192,8 +192,9 @@ class IntakeESMLoader:
         return dataarrays
 
 
-def save_mfdataset(ds: xr.Dataset, directory: Path, compute=True):
-    directory /= get_timestamp()
+def save_mfdataset(ds: xr.Dataset, directory: Path, compute=True, add_timestamp=True):
+    if add_timestamp:
+        directory /= get_timestamp()
     directory.mkdir(parents=True)
 
     if isinstance(ds["time"].values.flat[0], cftime.datetime):

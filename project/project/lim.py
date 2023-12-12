@@ -5,7 +5,7 @@ from typing import Union
 import dask.array
 import numpy as np
 import xarray as xr
-from numpy.linalg import inv, eig, eigvals, pinv, eigh
+from numpy.linalg import eig, eigvals, pinv, eigh
 from numpy.typing import NDArray
 from tqdm import tqdm
 from xarray import Dataset, DataArray
@@ -68,7 +68,7 @@ class LIM:
         self._fit_noise(C_0)
 
     def _fit_dynamics(self, C_0, C_tau):
-        self.G_tau = C_tau @ inv(C_0)
+        self.G_tau = C_tau @ pinv(C_0)
         if is_dask_array(self.G_tau):
             self.G_tau = self.G_tau.compute()
 
@@ -82,9 +82,9 @@ class LIM:
         if is_dask_array(Q):
             Q = Q.compute()
 
-        # Check if Q is Hermetian
+        # Check if Q is Hermitian
         if not np.isclose(Q, Q.conj().T, atol=1e-10).all():
-            raise ValueError("Q is not Hermetian (Q should equal Q.H)")
+            raise ValueError("Q is not Hermitian (Q should equal Q.H)")
 
         q_evals, q_evecs = eigh(Q)
         sort_idx = q_evals.argsort()
@@ -193,15 +193,14 @@ class LIM:
         forecast_np[:, :, 0] = np.broadcast_to(initial_np, (n_ensemble, self.Nx))
 
         ####
+        # Adapted from https://github.com/frodre/pyLIM/blob/master/pylim/LIM.py
 
-        rng = np.random.default_rng(546503548)
+        rng = np.random.default_rng(546503548 + int(initial.time))
         dt = 1 / n_int_steps_per_tau
         n_int_steps = int(n_int_steps_per_tau * n_steps)
         num_evals = self.Q_evals.shape[0]
 
         state_1 = forecast_np[:, :, 0].T
-        state_mid = state_1
-        state_2 = None
 
         # Do stochastic integration
         for i in tqdm(range(n_int_steps + 1)):
