@@ -2,10 +2,11 @@ import os
 from pathlib import Path
 from typing import Union
 
+import cartopy.crs as ccrs
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sb
-import cartopy.crs as ccrs
 from cartopy.util import add_cyclic_point
 
 
@@ -113,18 +114,14 @@ def format_plot(
         x_minor_locator_ax = x_minor_locator
         if not x_minor_locator_ax:
             if ax.get_xscale() == "log":
-                x_minor_locator_ax = mpl.ticker.LogLocator(
-                    base=10, subs="auto", numticks=100
-                )
+                x_minor_locator_ax = mpl.ticker.LogLocator(base=10, subs="auto", numticks=100)
             else:
                 x_minor_locator_ax = mpl.ticker.AutoMinorLocator()
 
         y_minor_locator_ax = y_minor_locator
         if not y_minor_locator_ax:
             if ax.get_yscale() == "log":
-                y_minor_locator_ax = mpl.ticker.LogLocator(
-                    base=10, subs="auto", numticks=100
-                )
+                y_minor_locator_ax = mpl.ticker.LogLocator(base=10, subs="auto", numticks=100)
             else:
                 y_minor_locator_ax = mpl.ticker.AutoMinorLocator()
 
@@ -157,26 +154,26 @@ def plot_field(
     vmin=None,
     vmax=None,
     cmap="Blues",
-    ocean_only=False,
     highlight_contour=None,
     rotate_cbar_ticks=False,
     n_level=50,
+    same_limits=False,
     **kwargs,
 ):
-    if not isinstance(axs, list):
+    if not (isinstance(axs, list) or isinstance(axs, np.ndarray)):
         axs = [axs]
-    if not isinstance(das, list):
+    if not (isinstance(axs, list) or isinstance(axs, np.ndarray)):
         das = [das]
 
     das = [da.load() for da in das]
 
-    if ocean_only:
-        # Ocean fields may be zero in certain regions at land-ocean borders
-        # Removing these may accidentally clip true zeros!
-        vmin = vmin or min([da.where(da > 0).min() for da in das])
-    else:
-        vmin = vmin or min([da.min() for da in das])
+    vmin = vmin or min([da.min() for da in das])
     vmax = vmax or max([da.max() for da in das])
+
+    if same_limits:
+        max_v = max(abs(vmin), abs(vmax))
+        vmax = max_v
+        vmin = -max_v
 
     for ax, da in zip(axs, das):
         lat = da.lat
