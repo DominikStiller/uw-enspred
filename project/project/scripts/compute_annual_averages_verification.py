@@ -15,7 +15,7 @@ if __name__ == "__main__":
     loader = IntakeESMLoader(
         "past1000",
         "MRI-ESM2-0",
-        ["tas"],
+        ["tas", "zg500", "tos"],
     )
     ds = loader.load_dataset()
 

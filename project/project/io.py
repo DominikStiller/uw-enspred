@@ -156,7 +156,7 @@ class IntakeESMLoader:
             # Chunk size should be a multiple of 120 (number of timesteps per file)
             # Otherwise multiple processes would access the same file, leading to errors
             dataset = query_results.to_dask(
-                progressbar=False, xarray_open_kwargs=dict(chunks=dict(time=5040))
+                progressbar=False, xarray_open_kwargs=dict(chunks=dict(time=5040), use_cftime=True)
             )
             dataset = dataset.drop_vars(
                 VARS_AND_DIMS_TO_DROP,

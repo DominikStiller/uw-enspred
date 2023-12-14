@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 if __name__ == "__main__":
     client = Client(n_workers=dask.system.CPU_COUNT // 2, threads_per_worker=1)
 
-    rundir = Path("/home/enkf6/dstiller/enspred/runs/2023-12-12T14-28-24")
+    rundir = Path("/home/enkf6/dstiller/enspred/runs/2023-12-12T14-58-07")
 
     logger.info("Loading prior")
     prior_phyical = xr.open_mfdataset(

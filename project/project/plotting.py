@@ -156,13 +156,14 @@ def plot_field(
     cmap="Blues",
     highlight_contour=None,
     rotate_cbar_ticks=False,
+    cbar_tick_angle=18,
     n_level=50,
     same_limits=False,
     **kwargs,
 ):
     if not (isinstance(axs, list) or isinstance(axs, np.ndarray)):
         axs = [axs]
-    if not (isinstance(axs, list) or isinstance(axs, np.ndarray)):
+    if not (isinstance(das, list) or isinstance(das, np.ndarray)):
         das = [das]
 
     das = [da.load() for da in das]
@@ -178,7 +179,6 @@ def plot_field(
     for ax, da in zip(axs, das):
         lat = da.lat
         da, lon = add_cyclic_point(da.values, coord=da.lon)
-
         # Use our own locator because the default locator does not respect vmin/vmax
         levels = mpl.ticker.MaxNLocator(n_level + 1).tick_values(vmin, vmax)
         cset = ax.contourf(
@@ -210,7 +210,7 @@ def plot_field(
         if highlight_contour:
             cb.add_lines(c_highlight)
         if rotate_cbar_ticks:
-            cb.ax.tick_params(rotation=15)
+            cb.ax.tick_params(rotation=cbar_tick_angle)
 
 
 set_plotting_theme()
