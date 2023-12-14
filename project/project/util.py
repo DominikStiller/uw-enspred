@@ -154,3 +154,11 @@ def average_annually(ds: Dataset) -> Dataset:
         .rename(group="time")
         .isel(time=slice(1, -1))
     )
+
+
+def area_weighted_mean(ds: Union[Dataset, DataArray]):
+    weights = np.sqrt(np.cos(np.radians(ds.lat)))
+    if "location" in ds.dims:
+        return ds.weighted(weights).mean("location")
+    else:
+        return ds.weighted(weights).mean(["lat", "lon"])
