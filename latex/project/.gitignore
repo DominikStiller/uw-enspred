@@ -1,7 +1,7 @@
 !build/
 build/*
 !build/main.pdf
-
+!plots/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
